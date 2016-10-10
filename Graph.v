@@ -15,12 +15,12 @@ Proof.
   simpl in |- *; auto.
 Qed. *given in the library*)
 
-Definition nodeToKeyConverter (n : node) : id :=
+Definition ntk (n : node) : id :=
   match n with
   | Node n => Id n
   end.
 
-Lemma injectivityOfNodeToKeyConverter : Injective nodeToKeyConverter.
+Lemma injectivityOfNodeToKeyConverter : Injective ntk.
 Proof.
   unfold Injective.
   intros.
@@ -30,7 +30,7 @@ Proof.
   reflexivity.
 Qed.
 
-Definition beq_node (a : node) (b : node) : bool := beq_id (nodeToKeyConverter a) (nodeToKeyConverter b).
+Definition beq_node (a : node) (b : node) : bool := beq_id (ntk a) (ntk b).
 
 Lemma beq_node_refl : forall (a : node), beq_node a a = true.
 Proof.
@@ -83,7 +83,7 @@ Definition nodeList := list node.
 
 
 
-Definition exGraph := (Edge (Node 1) (Node 2) 2) ::  (Edge (Node 2) (Node 3) 3) :: nil.
+Definition exGraph := (Edge (Node 1) (Node 2) 2) ::  (Edge (Node 2) (Node 3) 3) :: (Edge (Node 1) (Node 4) 1) :: (Edge (Node 4) (Node 3) 2) :: nil.
 Check exGraph.
 
 (* Define adjacency map, we go for total map as nil is the preferred choice for default rather than None in case of Partial Map*)
@@ -92,7 +92,7 @@ Definition adj_map_empty : total_map nodeList := t_empty nil.
 Fixpoint edgeListToAdjMap (el : edgeList) (m : total_map nodeList) : total_map nodeList :=
   match el with
   | nil => m
-  | (Edge p q w) :: tl => let pid := (nodeToKeyConverter p) in
+  | (Edge p q w) :: tl => let pid := (ntk p) in
                            edgeListToAdjMap tl (t_update m pid (q::(m pid)))
 end.
 
@@ -109,32 +109,44 @@ Fixpoint getEdgeWeight (el : edgeList) (e : edge) : wt :=
                 else getEdgeWeight tl e
   end.
 
-Definition dist_map : total_map wt := t_empty 1000.
+Definition empty_dist_map : total_map wt := t_empty 1000.
 
 Fixpoint min_dist (dist_map : total_map wt) (minode : node) (q : nodeList) : node :=
   match q with
   | nil => minode
-  | hd :: tl => min_dist dist_map (if (dist_map (nodeToKeyConverter hd)) <? (dist_map (nodeToKeyConverter minode)) then hd else minode) tl
+  | hd :: tl => min_dist dist_map (if (dist_map (ntk hd)) <? (dist_map (ntk minode)) then hd else minode) tl
   end.  
 
 Check fold_left.
 
-Fixpoint dijkstra (start_node end_node : node) (adj : total_map nodeList) (q : nodeList) (dist_map : total_map wt) (el : edgeList) (path : nodeList) : prod nodeList wt :=
-  match q with
-  | nil => pair path (dist_map (nodeToKeyConverter end_node))
-  | hd :: tl => let u := min_dist dist_map hd q in
-                let u_neighbours := adj (nodeToKeyConverter u) in
-                 let alt := fun (i : node) => (dist_map (nodeToKeyConverter u)) + getEdgeWeight el (Edge u i 0) in
-                 let updated_dist_map := fold_left (fun (dm : total_map wt) (n : node) => if alt n <? dm (nodeToKeyConverter n) then t_update dm (nodeToKeyConverter n) (alt n) else dm) u_neighbours dist_map in
-                  dijkstra start_node end_node adj tl updated_dist_map el (u::path)
+Fixpoint remove_node (n : node) (nl : nodeList) : nodeList :=
+  match nl with
+  | nil => nil
+  | hd :: tl => if beq_node n hd then tl else hd :: nil ++ remove_node n tl
   end.
 
-Eval compute in dijkstra (Node 1) (Node 3) (edgeListToAdjMap exGraph adj_map_empty) (Node 1 :: Node 2 :: Node 3 :: nil) (t_update dist_map (nodeToKeyConverter (Node 1)) 0) exGraph nil.
-               
-  
-         
+
+Fixpoint dijkstra (start_node end_node : node) (adj : total_map nodeList) (unvisited : nodeList) (visited : nodeList) (dist_map : total_map wt) (el : edgeList) (path : nodeList) : prod nodeList wt :=
+  match visited with
+  | nil => let udm := (t_update empty_dist_map (ntk start_node) 0) in
+                let u_neighbours := adj (ntk start_node) in
+                 let alt := fun (i : node) => (dist_map (ntk start_node)) + getEdgeWeight el (Edge start_node i 0) in
+                 let updated_dist_map := fold_left (fun (dm : total_map wt) (n : node) => if alt n <? dm (ntk n) then t_update dm (ntk n) (alt n) else dm) u_neighbours udm in
+                  dijkstra start_node end_node adj (remove_node start_node unvisited) (start_node::visited) updated_dist_map el (start_node::path)
+  | h :: t =>
+    
+  match unvisited with
+  | nil => pair path (dist_map (ntk end_node))
+  | hd :: tl => let u := min_dist dist_map hd unvisited in
+                let u_neighbours := adj (ntk u) in
+                 let alt := fun (i : node) => (dist_map (ntk u)) + getEdgeWeight el (Edge u i 0) in
+                 let updated_dist_map := fold_left (fun (dm : total_map wt) (n : node) => if alt n <? dm (ntk n) then t_update dm (ntk n) (alt n) else dm) u_neighbours dist_map in
+                  dijkstra start_node end_node adj tl (u::visited) updated_dist_map el (u::path)
+  end
+  end.
 
 
+Eval compute in dijkstra (Node 1) (Node 3) (edgeListToAdjMap exGraph adj_map_empty) (Node 1 :: Node 2 :: Node 3 :: Node 4 :: nil) (t_update dist_map (ntk (Node 1)) 0) exGraph nil.
 
 
-
+Lemma A : forall (x : node)
