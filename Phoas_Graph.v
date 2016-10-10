@@ -56,20 +56,20 @@ Check f1.
 
 Check edge_compose2 (edge_compose2 f1 g1) h1.
 
-Definition nodeList2 := list (forall i:id, u i).
-Definition edgeList2 := list (forall i j:id, u i -> u j).
+Inductive edge_list : Type :=
+  | ni : edge_list
+  | co {i j : id} : (u i -> u j) -> edge_list -> edge_list.
 
+Definition ex_edge_list : edge_list := co f1 (co g1 (co h1 ni)).
 
+Definition fromNode {i j : id} (e : u i -> u j) := i.
 (*better to use relations than functions, for pattern matching*)
 
-(*
-Fixpoint edgeListToAdjMap (el : edgeList2) (m : total_map edgeList2) : total_map edgeList2 :=
+Fixpoint edgeListToAdjMap (el : edge_list) (m : total_map edge_list) : total_map edge_list :=
   match el with
-  | nil => m
-  | hd :: tl => edgeListToAdjMap tl (t_update m i hd)
-  end.
-
-*)
+  | ni => m
+  | co hd tl => edgeListToAdjMap tl (t_update m (fromNode hd) tl)
+  end. 
                 
   
 
