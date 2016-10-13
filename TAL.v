@@ -89,15 +89,14 @@ Eval compute in init_heap (Id 2).
 
 (* find product of numbers stored in R1 and R2, store in R3
 *)
-Example ieval_jmp_example1 : ieval (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2))) (St init_heap init_regs (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2)))) (St init_heap
-                             (t_update init_regs (Id 3) 0)
-                             (ISeq (IIf 1 oneLEten (ANum 3))
-                                   (ISeq (IAdd 2 3 twoLEten threeLEten)
-                                         (ISeq (ISub 1 1 oneLEten) (IJmp (ANum 2)))))).
+(*Example ieval_example1 : ieval (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2))) (St init_heap init_regs (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2)))) ((St init_heap final_regs (IJmp (ANum 4)))).
 Proof.
   apply R_ISeq with (St init_heap (t_update init_regs (Id 3) 0) (IJmp (ANum 2))).
   apply R_IAss.
-  apply R_IJmp_Succ.
-  trivial.
-Qed.
-
+  apply R_IJmp_Succ with (St init_heap (t_update init_regs (Id 3) 0)
+                          (ISeq (IIf 1 oneLEten (ANum 3))
+                          (ISeq (IAdd 2 3 twoLEten threeLEten)
+                                (ISeq (ISub 1 1 oneLEten) (IJmp (ANum 2)))))).
+  
+  simpl.
+ *)
