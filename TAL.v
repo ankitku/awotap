@@ -73,13 +73,14 @@ Inductive ieval : st -> st -> Prop :=
 | R_ISeq : forall st st' st'', ieval st st' -> ieval st' st'' -> ieval st st''
 | R_IStuck : forall st, ieval st st
 .
-
-Definition fourLEten := (lt_n_S 3 9 (lt_n_S 2 8 (lt_n_S 1 7 (lt_n_S 0 6 (lt_0_Sn 5))))).
-Definition threeLEten := (lt_n_S 2 9 (lt_n_S 1 8 (lt_n_S 0 7 (lt_0_Sn 6)))).
-Definition twoLEten :=  (lt_n_S 1 9 (lt_n_S 0 8 (lt_0_Sn 7))).
+(* Proofs (n < K) for registers which are less than K = 10 in number *)
 Definition oneLEten :=  (lt_n_S 0 9 (lt_0_Sn 8)).
-
-
+Definition twoLEten :=  (lt_n_S 1 9 (lt_n_S 0 8 (lt_0_Sn 7))).
+Definition threeLEten := (lt_n_S 2 9 (lt_n_S 1 8 (lt_n_S 0 7 (lt_0_Sn 6)))).
+Definition fourLEten := (lt_n_S 3 9 (lt_n_S 2 8 (lt_n_S 1 7 (lt_n_S 0 6 (lt_0_Sn 5))))).
+Definition fiveLEten := (lt_n_S 4 9 (lt_n_S 3 8 (lt_n_S 2 7 (lt_n_S 1 6 (lt_n_S 0 5 (lt_0_Sn 4)))))).
+Definition sixLEten := (lt_n_S 5 9 (lt_n_S 4 8 (lt_n_S 3 7 (lt_n_S 2 6 (lt_n_S 1 5 (lt_n_S 0 4 (lt_0_Sn 3))))))).
+Definition sevenLEten :=  (lt_n_S 6 9 (lt_n_S 5 8 (lt_n_S 4 7 (lt_n_S 3 6 (lt_n_S 2 5 (lt_n_S 1 4 (lt_n_S 0 3 (lt_0_Sn 2)))))))).
 
 Definition init_heap := (update (update (update empty_heap (Id 1) (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2)))) (Id 2) (ISeq (IIf 1 oneLEten (ANum 3)) (ISeq (IAdd 2 3 twoLEten threeLEten) (ISeq (ISub 1 1 oneLEten) (IJmp (ANum 2))) ))  )  (Id 3) (IJmp (AReg 4)) ).
 
@@ -88,19 +89,25 @@ Definition final_regs : registers := (t_update (t_update (t_update  (t_update (t
 
 Eval compute in init_heap (Id (init_regs (Id 6))).
 
-(* find product of numbers stored in R1 and R2, store in R3 
+(* jump to a label proof *)
 
-Example ieval_example1 : ieval (St init_heap init_regs (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2)))) ((St init_heap final_regs (IJmp (ANum 4)))).
-Proof.
-  apply R_ISeq with (St init_heap (t_update init_regs (Id 3) 0) (IJmp (ANum 2))).
-  apply R_IAss.
-  apply R_IJmp_Succ with (St init_heap (t_update init_regs (Id 3) 0)
+Example ieval_example1 : ieval (St init_heap init_regs (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2)))) (St init_heap (t_update init_regs (Id 3) 0)
                           (ISeq (IIf 1 oneLEten (ANum 3))
                           (ISeq (IAdd 2 3 twoLEten threeLEten)
                           (ISeq (ISub 1 1 oneLEten) (IJmp (ANum 2)))))).
-  
+Proof.
+  apply R_ISeq with (St init_heap (t_update init_regs (Id 3) 0) (IJmp (ANum 2))).
+  apply R_IAss.
+  apply R_IJmp_Succ.
+  unfold init_heap.
+  rewrite update_neq.
+  rewrite update_eq.
+  reflexivity.
+  unfold t_update.
+  rewrite <- beq_id_false_iff.
   simpl.
-*)
+  trivial.
+Qed.
 
 Inductive var : Type :=
 | alpha : var
@@ -125,7 +132,8 @@ Definition empty_Psi : context := empty.
 (* typing rules for arithmetic expressions *)
 Inductive ahas_type : context -> context -> aexp -> ty -> Prop :=
 | S_Reg : forall Psi Gamma (r : nat) tau, r < K -> Gamma (Id r) = Some tau -> ahas_type Psi Gamma (AReg r) tau 
-| S_Int : forall Psi Gamma (n : nat), ahas_type Psi Gamma (ANum n) int.
+| S_Int : forall Psi Gamma (n : nat), ahas_type Psi Gamma (ANum n) int
+| S_Lab : forall Psi Gamma (s : nat) tau, Psi (Id s) = Some tau -> ahas_type Psi Gamma (ANum s) tau.
 
 Lemma S_Inst:  forall Gamma a, (tyvar a) = (code Gamma).
 Proof.
@@ -136,10 +144,11 @@ Admitted.
 Hint Constructors ahas_type.
 
 (* typing rules for instructions *)
+(* Jmp to Num v is for labels in heap.*)
 Inductive ihas_type : context -> context -> instr -> ty -> Prop :=
 | S_Mov : forall Psi Gamma v tau d pf, ahas_type Psi Gamma v tau -> ihas_type Psi (update Gamma (Id d) tau) (IAss d pf v) tau
-| S_Add : forall Psi Gamma s d pf1 pf2, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> ihas_type Psi Gamma (IAdd d s pf1 pf2) int
-| S_If :  forall Psi Gamma s v pf1, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg v) (code Gamma) -> ihas_type Psi Gamma (IIf s pf1 (AReg v)) (arrow Gamma Gamma)
+| S_Add : forall Psi Gamma s d pf1 pf2, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> ihas_type Psi Gamma (IAdd d s pf1 pf2) (arrow Gamma (update Gamma (Id d) int))
+| S_If :  forall Psi Gamma s v pf1, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (ANum v) (code Gamma) -> ihas_type Psi Gamma (IIf s pf1 (ANum v)) (arrow Gamma Gamma)
 | S_Jmp :  forall Psi Gamma v,  ahas_type Psi Gamma (AReg v) (code Gamma) -> ihas_type Psi Gamma (IJmp (AReg v)) (code Gamma)
 | S_Seq :  forall Psi i1 i2 Gamma Gamma2,  ihas_type Psi Gamma i1 (arrow Gamma Gamma2) -> ihas_type Psi Gamma i2 (code Gamma2) -> ihas_type Psi Gamma (ISeq i1 i2) (code Gamma).
 
@@ -167,10 +176,11 @@ Hint Constructors M_ok.
 Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4) (code ( update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4)  (tyvar alpha) ) ).
 Check init_Gamma.
 
+Definition init_Psi : context := update (update empty_Psi (Id 1) (code init_Gamma))(Id 3) (code init_Gamma).
 
 Eval compute in   (init_heap (Id 2)).
 
-Lemma heap_2_type : forall I, (init_heap (Id 2)) = Some I -> ihas_type empty_Psi init_Gamma I (code init_Gamma).
+Lemma heap_2_type : forall I, (init_heap (Id 2)) = Some I -> ihas_type init_Psi init_Gamma I (code init_Gamma).
 Proof.
   intros.
   unfold init_heap in H.
@@ -180,7 +190,52 @@ Proof.
   inversion H.  
   apply S_Seq with (Gamma2 := init_Gamma).
   apply S_If.
+  apply S_Reg.
+  apply oneLEten.
+  unfold init_Gamma.
+  rewrite update_neq.
+  rewrite update_neq.
+  rewrite update_neq.
+  rewrite update_eq.
   
+  reflexivity.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  apply S_Lab.
+  unfold init_Psi.
+  rewrite update_eq.
+  reflexivity.
+
+  apply S_Seq with (Gamma2 := update init_Gamma (Id 2) int).
+  apply S_Add.
+  apply S_Reg.
+  apply threeLEten.
+  unfold init_Gamma.
+  rewrite update_neq.
+  rewrite update_eq.
+  reflexivity.
+  rewrite <- beq_id_false_iff.
+  trivial.  
+  apply S_Reg.
+  apply twoLEten.
+  unfold init_Gamma.
+  rewrite update_neq.
+  rewrite update_neq.
+  rewrite update_eq.
+  reflexivity.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  apply S_Seq with update_same.
+  
+  rewrite <- beq_id_false_iff.
+  trivial.  
+ 
 Lemma heap_1_type : forall I, (init_heap (Id 3)) = Some I -> ihas_type empty_Psi init_Gamma I (code init_Gamma).
 Proof.
   intros.
