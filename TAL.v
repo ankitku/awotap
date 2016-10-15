@@ -74,6 +74,7 @@ Inductive ieval : st -> st -> Prop :=
 | R_IStuck : forall st, ieval st st
 .
 
+Definition fourLEten := (lt_n_S 3 9 (lt_n_S 2 8 (lt_n_S 1 7 (lt_n_S 0 6 (lt_0_Sn 5))))).
 Definition threeLEten := (lt_n_S 2 9 (lt_n_S 1 8 (lt_n_S 0 7 (lt_0_Sn 6)))).
 Definition twoLEten :=  (lt_n_S 1 9 (lt_n_S 0 8 (lt_0_Sn 7))).
 Definition oneLEten :=  (lt_n_S 0 9 (lt_0_Sn 8)).
@@ -101,51 +102,95 @@ Proof.
   simpl.
 *)
 
+Inductive var : Type :=
+| alpha : var
+| beta : var
+| gam : var.
+          
 Inductive ty : Type :=
 | int : ty
 | code : partial_map ty -> ty
 | arrow : partial_map ty -> partial_map ty -> ty                           
-| True : ty.
-
+| tyvar : var -> ty
+| poly : var -> ty -> ty.
 
 Definition context := partial_map ty.
 
 (* register file types *)
-Definition Gamma : context := empty.
+Definition empty_Gamma : context := empty.
 
-(* instruction types *)
-Definition Psi : context := empty.
+(* heap types *)
+Definition empty_Psi : context := empty.
 
 (* typing rules for arithmetic expressions *)
 Inductive ahas_type : context -> context -> aexp -> ty -> Prop :=
 | S_Reg : forall Psi Gamma (r : nat) tau, r < K -> Gamma (Id r) = Some tau -> ahas_type Psi Gamma (AReg r) tau 
 | S_Int : forall Psi Gamma (n : nat), ahas_type Psi Gamma (ANum n) int.
 
+Lemma S_Inst:  forall Gamma a, (tyvar a) = (code Gamma).
+Proof.
+Admitted.
+
+    
+  
 Hint Constructors ahas_type.
 
+(* typing rules for instructions *)
 Inductive ihas_type : context -> context -> instr -> ty -> Prop :=
 | S_Mov : forall Psi Gamma v tau d pf, ahas_type Psi Gamma v tau -> ihas_type Psi (update Gamma (Id d) tau) (IAss d pf v) tau
 | S_Add : forall Psi Gamma s d pf1 pf2, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> ihas_type Psi Gamma (IAdd d s pf1 pf2) int
 | S_If :  forall Psi Gamma s v pf1, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg v) (code Gamma) -> ihas_type Psi Gamma (IIf s pf1 (AReg v)) (arrow Gamma Gamma)
-| S_Jump :  forall Psi Gamma v,  ahas_type Psi Gamma (AReg v) (code Gamma) -> ihas_type Psi Gamma (IJmp (AReg v)) (code Gamma)
+| S_Jmp :  forall Psi Gamma v,  ahas_type Psi Gamma (AReg v) (code Gamma) -> ihas_type Psi Gamma (IJmp (AReg v)) (code Gamma)
 | S_Seq :  forall Psi i1 i2 Gamma Gamma2,  ihas_type Psi Gamma i1 (arrow Gamma Gamma2) -> ihas_type Psi Gamma i2 (code Gamma2) -> ihas_type Psi Gamma (ISeq i1 i2) (code Gamma).
 
 Hint Constructors ihas_type.
 
-
+(* typing rules for register file *)
 Inductive Rhas_type : context -> registers -> context -> Prop :=
 | S_Regfile : forall r Psi Gamma (R : registers) tau, r < K ->  (Gamma (Id r)) = Some tau -> ahas_type Psi Gamma (AReg r) tau -> Rhas_type Psi R Gamma.
 
 Hint Constructors Rhas_type.
 
+(* typing rules for heap*)
 Inductive Hhas_type : heaps -> context -> Prop :=
   | S_Heap : forall Psi Gamma (H : heaps) l tau i, Psi (Id l) = Some tau -> H (Id l) = Some i -> ihas_type Psi Gamma i tau -> Hhas_type H Psi.
 
 Hint Constructors Hhas_type.
 
+(* typing rules for Machine State*)
 Inductive M_ok : heaps -> registers -> instr -> Prop :=
 | S_Mach : forall H R I Psi Gamma , Hhas_type H Psi -> Rhas_type Psi R Gamma -> ihas_type Psi Gamma I (code Gamma) -> M_ok H R I.
 
 Hint Constructors M_ok.
 
-                                           
+
+Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4) (code ( update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4)  (tyvar alpha) ) ).
+Check init_Gamma.
+
+
+Eval compute in   (init_heap (Id 2)).
+
+Lemma heap_2_type : forall I, (init_heap (Id 2)) = Some I -> ihas_type empty_Psi init_Gamma I (code init_Gamma).
+Proof.
+  intros.
+  unfold init_heap in H.
+  rewrite update_neq in H.
+  rewrite update_eq in H.
+  symmetry in H.
+  inversion H.  
+  apply S_Seq with (Gamma2 := init_Gamma).
+  apply S_If.
+  
+Lemma heap_1_type : forall I, (init_heap (Id 3)) = Some I -> ihas_type empty_Psi init_Gamma I (code init_Gamma).
+Proof.
+  intros.
+  unfold init_heap in H.
+  rewrite update_eq in H.
+  symmetry in H.
+  inversion H.
+  apply S_Jmp.
+  apply S_Reg.
+  apply fourLEten.
+  unfold init_Gamma.
+  rewrite update_eq.
+  rewrite S_Inst.
