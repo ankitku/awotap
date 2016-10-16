@@ -161,7 +161,7 @@ Inductive Hhas_type : heaps -> context -> Prop :=
 
 Hint Constructors Hhas_type.
 
-(* typing rules for Machine State*)
+(* typing rules for Machine State *)
 Inductive M_ok : heaps -> registers -> instr -> Prop :=
 | S_Mach : forall H R I Psi Gamma , Hhas_type H Psi -> Rhas_type Psi R Gamma -> ihas_type Psi Gamma I (code Gamma) -> M_ok H R I.
 
@@ -276,3 +276,42 @@ Proof.
   unfold init_Gamma.
   apply update_eq.
 Qed.
+
+Lemma Canonical_Values_int : forall H Psi v tau, Hhas_type H Psi -> ahas_type Psi empty_Gamma v tau -> tau = int -> exists n, v = ANum n.
+Proof.
+  intros.
+  subst.
+  inversion H1.
+  Focus 2.
+  exists n.
+  reflexivity.
+  subst.
+  elimtype False.
+  unfold empty_Gamma in H3.
+  rewrite apply_empty in H3.
+  inversion H3.
+  exists s.
+  reflexivity.
+Qed.
+
+(*
+Lemma Canonical_Values_label : forall H Psi Gamma r tau R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) tau -> tau = code Gamma -> exists i, Some i = H (Id (R (Id r))) -> ihas_type Psi Gamma i tau.
+Proof.
+  intros.
+  generalize H0.
+  exists i.
+  intros.
+  rewrite H5 in H3.
+  simpl in H3 .with (l := R (Id r) ).
+ *)
+
+Theorem Soundness : forall H R I, M_ok H R I -> exists H' R' I', ieval (St H R I) (St H' R' I') /\ M_ok H' R' I'.
+Proof.
+  intros.
+  inversion H0.
+  subst.
+  induction I in H4.
+  Focus 6.
+  inversion H4.
+  subst.
+  
