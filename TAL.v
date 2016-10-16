@@ -79,9 +79,6 @@ Definition oneLEten :=  (lt_n_S 0 9 (lt_0_Sn 8)).
 Definition twoLEten :=  (lt_n_S 1 9 (lt_n_S 0 8 (lt_0_Sn 7))).
 Definition threeLEten := (lt_n_S 2 9 (lt_n_S 1 8 (lt_n_S 0 7 (lt_0_Sn 6)))).
 Definition fourLEten := (lt_n_S 3 9 (lt_n_S 2 8 (lt_n_S 1 7 (lt_n_S 0 6 (lt_0_Sn 5))))).
-Definition fiveLEten := (lt_n_S 4 9 (lt_n_S 3 8 (lt_n_S 2 7 (lt_n_S 1 6 (lt_n_S 0 5 (lt_0_Sn 4)))))).
-Definition sixLEten := (lt_n_S 5 9 (lt_n_S 4 8 (lt_n_S 3 7 (lt_n_S 2 6 (lt_n_S 1 5 (lt_n_S 0 4 (lt_0_Sn 3))))))).
-Definition sevenLEten :=  (lt_n_S 6 9 (lt_n_S 5 8 (lt_n_S 4 7 (lt_n_S 3 6 (lt_n_S 2 5 (lt_n_S 1 4 (lt_n_S 0 3 (lt_0_Sn 2)))))))).
 
 Definition init_heap := (update (update (update empty_heap (Id 1) (ISeq (IAss 3 threeLEten (ANum 0)) (IJmp (ANum 2)))) (Id 2) (ISeq (IIf 1 oneLEten (ANum 3)) (ISeq (IAdd 2 3 twoLEten threeLEten) (ISeq (ISub 1 1 oneLEten) (IJmp (ANum 2))) ))  )  (Id 3) (IJmp (AReg 4)) ).
 
@@ -118,9 +115,9 @@ Inductive var : Type :=
 Inductive ty : Type :=
 | int : ty
 | code : partial_map ty -> ty
-| arrow : partial_map ty -> partial_map ty -> ty                           
-| tyvar : var -> ty
-| poly : var -> ty -> ty.
+| arrow : partial_map ty -> partial_map ty -> ty
+| True : ty.
+
 
 Definition context := partial_map ty.
 
@@ -143,11 +140,11 @@ Hint Constructors ahas_type.
 (* Jmp to Num v is for labels in heap.*)
 Inductive ihas_type : context -> context -> instr -> ty -> Prop :=
 | S_Mov : forall Psi Gamma v tau d pf, ahas_type Psi Gamma v tau -> ihas_type Psi (update Gamma (Id d) tau) (IAss d pf v) tau
-| S_Add : forall Psi Gamma s d pf1 pf2, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> ihas_type Psi Gamma (IAdd d s pf1 pf2) (arrow Gamma Gamma)
+| S_Add : forall Psi Gamma s d pf1 pf2, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> update Gamma (Id d) int = Gamma -> ihas_type Psi Gamma (IAdd d s pf1 pf2) (arrow Gamma Gamma)
 | S_Sub : forall Psi Gamma s n pf, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (ANum n) int -> ihas_type Psi Gamma (ISub s n pf) (arrow Gamma Gamma)
 | S_If :  forall Psi Gamma s v pf1, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (ANum v) (code Gamma) -> ihas_type Psi Gamma (IIf s pf1 (ANum v)) (arrow Gamma Gamma)
 | S_Jmp :  forall Psi Gamma v,  ahas_type Psi Gamma (ANum v) (code Gamma) -> ihas_type Psi Gamma (IJmp (ANum v)) (code Gamma)
-| S_JmpR :  forall Psi Gamma v,  ahas_type Psi Gamma (AReg v) (code Gamma) -> ihas_type Psi Gamma (IJmp (AReg v)) (code Gamma)
+| S_JmpR :  forall Psi Gamma v i,  Gamma (Id i) = Some True -> update Gamma (Id i) True = Gamma -> ahas_type Psi Gamma (AReg v) True -> ihas_type Psi Gamma (IJmp (AReg v)) (code Gamma)
 | S_Seq :  forall Psi i1 i2 Gamma Gamma2,  ihas_type Psi Gamma i1 (arrow Gamma Gamma2) -> ihas_type Psi Gamma i2 (code Gamma2) -> ihas_type Psi Gamma (ISeq i1 i2) (code Gamma).
 
 Hint Constructors ihas_type.
@@ -171,7 +168,7 @@ Inductive M_ok : heaps -> registers -> instr -> Prop :=
 Hint Constructors M_ok.
 
 
-Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4) (code ( update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4)  (tyvar alpha) ) ).
+Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4) True.
 Check init_Gamma.
 
 Definition init_Psi : context := update (update (update empty_Psi (Id 1) (code init_Gamma))(Id 3) (code init_Gamma)) (Id 2) (code init_Gamma).
@@ -211,8 +208,8 @@ Proof.
   rewrite <- beq_id_false_iff.
   trivial.
   
-  apply S_Seq with (Gamma2 :=  init_Gamma).
-  apply S_Add with (Gamma := init_Gamma).
+  apply S_Seq with (Gamma2 := init_Gamma).
+  apply S_Add.
   apply S_Reg.
   apply threeLEten.
   unfold init_Gamma.
@@ -227,6 +224,13 @@ Proof.
   rewrite update_neq.
   rewrite update_neq.
   rewrite update_eq.
+  reflexivity.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  rewrite <- beq_id_false_iff.
+  trivial.
+  apply update_same.
+  unfold init_Gamma. rewrite update_neq. rewrite update_neq. rewrite update_eq.
   reflexivity.
   rewrite <- beq_id_false_iff.
   trivial.
@@ -253,7 +257,7 @@ Proof.
   rewrite <- beq_id_false_iff.
   trivial.  
 Qed.
-
+                   
 Lemma heap_1_type : forall I, (init_heap (Id 3)) = Some I -> ihas_type init_Psi init_Gamma I (code init_Gamma).
 Proof.
   intros.
@@ -261,9 +265,14 @@ Proof.
   rewrite update_eq in H.
   symmetry in H.
   inversion H.
-  apply S_JmpR.
+  apply S_JmpR with (i := 4).
+  unfold init_Gamma.
+  apply update_eq.
+  apply update_same.
+  unfold init_Gamma.
+  apply update_eq.
   apply S_Reg.
   apply fourLEten.
   unfold init_Gamma.
-  rewrite update_eq.
-  rewrite S_Inst.
+  apply update_eq.
+Qed.
