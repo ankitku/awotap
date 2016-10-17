@@ -260,15 +260,25 @@ Proof.
 Qed.
 
 
-Lemma Canonical_Values_label : forall H Psi Gamma r tau R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) tau -> tau = code Gamma -> exists i l, Some i = H (Id l) -> ihas_type Psi Gamma i tau -> R (Id r) = l.
+Lemma Canonical_Values_label : forall H Psi Gamma r R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (code Gamma) -> exists i l, ihas_type Psi Gamma i (code Gamma) -> l = R (Id r) -> Some i = H (Id (l)).
 Proof.
   intros.
-  rewrite H2 in H1.
-  inversion H0.
   inversion H1.
+  inversion H0.
   exists i.
-  exists (R (Id r)).
+  exists l.
   intros.
+  inversion H14.
+  rewrite H10.
+  rewrite H19.
+  reflexivity.
+
+  rewrite H10.
+  rewrite H21.
+  reflexivity.
+
+  rewrite H10.
+  rewrite H20.
   reflexivity.
 Qed.
 
@@ -348,6 +358,8 @@ Proof.
   assumption.
 
   (* IJmp *)
+  pose proof Canonical_Values_label as CVL.
+  inversion H2.
+  symmetry in H10.
   inversion H4.
-  inversion H11.
   
