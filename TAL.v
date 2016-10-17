@@ -139,7 +139,7 @@ Hint Constructors ahas_type.
 (* typing rules for instructions *)
 (* Jmp to Num v is for labels in heap.*)
 Inductive ihas_type : context -> context -> instr -> ty -> Prop :=
-| S_Mov : forall Psi Gamma v tau d pf, ahas_type Psi Gamma v tau -> ihas_type Psi (update Gamma (Id d) tau) (IAss d pf v) tau
+| S_Mov : forall Psi Gamma v tau d pf, ahas_type Psi Gamma v tau -> ahas_type Psi Gamma (AReg d) tau -> (update Gamma (Id d) tau) = Gamma -> ihas_type Psi Gamma (IAss d pf v) (arrow Gamma Gamma)
 | S_Add : forall Psi Gamma s d pf1 pf2, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> update Gamma (Id d) int = Gamma -> ihas_type Psi Gamma (IAdd d s pf1 pf2) (arrow Gamma Gamma)
 | S_Sub : forall Psi Gamma s n pf, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (ANum n) int -> ihas_type Psi Gamma (ISub s n pf) (arrow Gamma Gamma)
 | S_If :  forall Psi Gamma s v pf1, ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (ANum v) (code Gamma) -> ihas_type Psi Gamma (IIf s pf1 (ANum v)) (arrow Gamma Gamma)
@@ -163,7 +163,7 @@ Hint Constructors Hhas_type.
 
 (* typing rules for Machine State *)
 Inductive M_ok : heaps -> registers -> instr -> Prop :=
-| S_Mach : forall H R I Psi Gamma , Hhas_type H Psi -> Rhas_type Psi R Gamma -> ihas_type Psi Gamma I (code Gamma) -> M_ok H R I.
+| S_Mach : forall H R I Psi Gamma, Hhas_type H Psi -> Rhas_type Psi R Gamma -> ihas_type Psi Gamma I (code Gamma) -> M_ok H R I.
 
 Hint Constructors M_ok.
 
@@ -173,7 +173,10 @@ Check init_Gamma.
 
 Definition init_Psi : context := update (update (update empty_Psi (Id 1) (code init_Gamma))(Id 3) (code init_Gamma)) (Id 2) (code init_Gamma).
 
-Eval compute in   (init_heap (Id 2)).
+
+Ltac match_map := repeat (try rewrite update_neq; try rewrite update_eq; try reflexivity).
+Ltac inequality := (rewrite <- beq_id_false_iff; trivial).
+Ltac crush_map := match_map; inequality.
 
 Lemma heap_2_type : forall I, (init_heap (Id 2)) = Some I -> ihas_type init_Psi init_Gamma I (code init_Gamma).
 Proof.
@@ -188,67 +191,29 @@ Proof.
   apply S_Reg.
   apply oneLEten.
   unfold init_Gamma.
-  rewrite update_neq.
-  rewrite update_neq.
-  rewrite update_neq.
-  rewrite update_eq.
-  
-  reflexivity.
-  rewrite <- beq_id_false_iff.
-  trivial.
-  rewrite <- beq_id_false_iff.
-  trivial.
-  rewrite <- beq_id_false_iff.
-  trivial.
+  crush_map.        
   apply S_Lab.
   unfold init_Psi.
-  rewrite update_neq.
-  rewrite update_eq.
-  reflexivity.
-  rewrite <- beq_id_false_iff.
-  trivial.
-  
+  crush_map.
   apply S_Seq with (Gamma2 := init_Gamma).
   apply S_Add.
   apply S_Reg.
   apply threeLEten.
   unfold init_Gamma.
-  rewrite update_neq.
-  rewrite update_eq.
-  reflexivity.
-  rewrite <- beq_id_false_iff.
-  trivial.  
+  crush_map.
   apply S_Reg.
   apply twoLEten.
   unfold init_Gamma.
-  rewrite update_neq.
-  rewrite update_neq.
-  rewrite update_eq.
-  reflexivity.
-  rewrite <- beq_id_false_iff.
-  trivial.
-  rewrite <- beq_id_false_iff.
-  trivial.
+  crush_map.
   apply update_same.
-  unfold init_Gamma. rewrite update_neq. rewrite update_neq. rewrite update_eq.
-  reflexivity.
-  rewrite <- beq_id_false_iff.
-  trivial.
-  rewrite <- beq_id_false_iff.
-  trivial.
+  unfold init_Gamma.
+  crush_map.
   apply S_Seq with (Gamma2 := init_Gamma).
   apply S_Sub.
   apply S_Reg.
   apply oneLEten.
   unfold init_Gamma.
-  rewrite update_neq.
-  rewrite update_neq.
-  rewrite update_neq.
-  rewrite update_eq.  
-  reflexivity.
-  repeat (try rewrite <- beq_id_false_iff; trivial).
-  repeat (try rewrite <- beq_id_false_iff; trivial).
-  repeat (try rewrite <- beq_id_false_iff; trivial).
+  crush_map.
   apply S_Int.
   apply S_Jmp.
   apply S_Lab.
@@ -309,9 +274,43 @@ Theorem Soundness : forall H R I, M_ok H R I -> exists H' R' I', ieval (St H R I
 Proof.
   intros.
   inversion H0.
-  subst.
   induction I in H4.
-  Focus 6.
   inversion H4.
-  subst.
+  inversion H4.
+  inversion H4.
+  inversion H4.
+  induction i1 in H4.
+  inversion H4.
+  inversion H12.
+  symmetry in H16.
+  rewrite H16 in H13.
+  apply IHi2.
+  exact H13.
+
+  (* ISeq IAdd I *)
+  inversion H4.
+  inversion H12.
+  symmetry in H16.
+  rewrite H16 in H13.
+  apply IHi2.
+  exact H13.
   
+  (* ISeq ISub I *)
+  inversion H4.
+  inversion H12.
+  symmetry in H18.
+  rewrite H18 in H13.
+  apply IHi2.
+  exact H13.
+
+  (* ISeq IIf I *)
+  inversion H4.
+  inversion H12.
+  symmetry in H18.
+  rewrite H18 in H13.
+  apply IHi2.
+  exact H13.
+
+  (* ISeq ISeq I *)
+  apply IHi2.
+  inversion H4.
