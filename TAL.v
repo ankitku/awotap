@@ -316,3 +316,38 @@ Proof.
   (* ISeq ISeq I *)
   apply IHi2.
   inversion H4.
+  inversion H13.
+  symmetry in H14; rewrite H14 in H18; rewrite H14.
+  symmetry in H17; rewrite H17 in H13; rewrite H14 in H13.
+  assumption.
+
+  symmetry in H14.
+  rewrite H14.
+  symmetry in H19; rewrite H19 in H13; rewrite H14 in H13.
+  assumption.
+
+  apply S_Seq with (Gamma2 := Gamma3).
+  assumption.
+  assumption.
+
+  (* ISeq IJmp I *)
+  apply IHi2.
+  inversion H4.
+  inversion H13.
+    symmetry in H14; rewrite H14 in H18; rewrite H14.
+  symmetry in H17; rewrite H17 in H13; rewrite H14 in H13.
+  assumption.
+
+  symmetry in H14.
+  rewrite H14.
+  symmetry in H19; rewrite H19 in H13; rewrite H14 in H13.
+  assumption.
+
+  apply S_Seq with (Gamma2 := Gamma3).
+  assumption.
+  assumption.
+
+  (* IJmp *)
+  inversion H4.
+  inversion H11.
+  
