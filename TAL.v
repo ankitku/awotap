@@ -259,16 +259,18 @@ Proof.
   reflexivity.
 Qed.
 
-(*
-Lemma Canonical_Values_label : forall H Psi Gamma r tau R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) tau -> tau = code Gamma -> exists i, Some i = H (Id (R (Id r))) -> ihas_type Psi Gamma i tau.
+
+Lemma Canonical_Values_label : forall H Psi Gamma r tau R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) tau -> tau = code Gamma -> exists i l, Some i = H (Id l) -> ihas_type Psi Gamma i tau -> R (Id r) = l.
 Proof.
   intros.
-  generalize H0.
+  rewrite H2 in H1.
+  inversion H0.
+  inversion H1.
   exists i.
+  exists (R (Id r)).
   intros.
-  rewrite H5 in H3.
-  simpl in H3 .with (l := R (Id r) ).
- *)
+  reflexivity.
+Qed.
 
 Theorem Soundness : forall H R I, M_ok H R I -> exists H' R' I', ieval (St H R I) (St H' R' I') /\ M_ok H' R' I'.
 Proof.
