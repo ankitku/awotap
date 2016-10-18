@@ -260,7 +260,7 @@ Proof.
 Qed.
 
 
-Lemma Canonical_Values_label : forall H Psi Gamma r R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (code Gamma) -> exists i l, ihas_type Psi Gamma i (code Gamma) -> l = R (Id r) -> Some i = H (Id (l)).
+Lemma Canonical_Values_label1 : forall H Psi Gamma r R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (code Gamma) -> exists i l, ihas_type Psi Gamma i (code Gamma) -> l = R (Id r) -> Some i = H (Id l).
 Proof.
   intros.
   inversion H1.
@@ -282,6 +282,19 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma Canonical_Values_label2 : forall H Psi Gamma v, Hhas_type H Psi -> ahas_type Psi Gamma (ANum v) (code Gamma) -> exists i l, ihas_type Psi Gamma i (code Gamma) -> v = l -> Some i = H (Id l).
+Proof.
+  intros.
+  inversion H1.
+  inversion H0.
+  exists i.
+  exists l.
+  intros.
+  rewrite H9.
+  reflexivity.
+Qed.
+  
+  
 Theorem Soundness : forall H R I, M_ok H R I -> exists H' R' I', ieval (St H R I) (St H' R' I') /\ M_ok H' R' I'.
 Proof.
   intros.
@@ -358,8 +371,10 @@ Proof.
   assumption.
 
   (* IJmp *)
-  pose proof Canonical_Values_label as CVL.
-  inversion H2.
-  symmetry in H10.
   inversion H4.
-  
+  symmetry in H8.
+  rewrite H8 in H4.
+  inversion H11.
+  pose proof Canonical_Values_label2 H Psi Gamma v H2 H11 as CVL.
+  exists H.
+  exists R.
