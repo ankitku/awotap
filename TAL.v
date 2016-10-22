@@ -66,8 +66,8 @@ Inductive ieval : st -> st -> Prop :=
 | R_IAss : forall H R I d a1 pf, ieval (St H R (ISeq (IAss d pf a1) I)) (St H (t_update R (Id d) (aeval a1 R)) I)
 | R_IAdd : forall H R I d s pf1 pf2, ieval (St H R (ISeq (IAdd d s pf1 pf2) I)) (St H (t_update R (Id s) (aeval (AReg d) R + aeval (AReg s) R)) I)
 | R_ISub : forall H R I d v pf1, ieval (St H R (ISeq (ISub d v pf1) I)) (St H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) I)
-| R_IJmp_Succ : forall H R I v, H (Id v) = Some I -> ieval (St H R (IJmp (ANum v))) (St H R I)
-| R_IJmpR_Succ : forall H R I v, H (Id (R (Id v))) = Some I -> ieval (St H R (IJmp (ANum v))) (St H R I)
+| R_IJmp_Succ : forall H R I' v, H (Id v) = Some I' -> ieval (St H R (IJmp (ANum v))) (St H R I')
+| R_IJmpR_Succ : forall H R I' v, H (Id (R (Id v))) = Some I' -> ieval (St H R (IJmp (ANum v))) (St H R I')
 | R_IJmp_Fail : forall H R I v, H (Id v) = None -> ieval (St H R I) (St H R I)
 | R_IIf_EQ : forall H R I I' v r, aeval (AReg r) R = 0 -> (H (Id (R (Id v)))) = Some I' -> ieval (St H R I) (St H R I')
 | R_IIf_NEQ : forall H R I v r pf, aeval (AReg r) R <> 0 -> ieval (St H R (ISeq (IIf r pf (AReg v)) I)) (St H R I)   
@@ -96,15 +96,8 @@ Example ieval_example1 : ieval (St init_heap init_regs (ISeq (IAss 3 threeLEten 
 Proof.
   apply R_ISeq with (St init_heap (t_update init_regs (Id 3) 0) (IJmp (ANum 2))).
   apply R_IAss.
-  apply R_IJmp_Succ.
-  unfold init_heap.
-  rewrite update_neq.
-  rewrite update_eq.
+  apply R_IJmp_Succ with (v := 2).
   reflexivity.
-  unfold t_update.
-  rewrite <- beq_id_false_iff.
-  simpl.
-  trivial.
 Qed.
 
 Inductive var : Type :=
@@ -299,17 +292,18 @@ Theorem Soundness : forall H R I, M_ok H R I -> exists H' R' I', ieval (St H R I
 Proof.
   intros.
   inversion H0.
-  induction I in H4.
+  induction I.
   inversion H4.
   inversion H4.
   inversion H4.
   inversion H4.
-  induction i1 in H4.
+  induction I1 in H4.
   inversion H4.
   inversion H12.
   symmetry in H16.
   rewrite H16 in H13.
-  apply IHi2.
+  subst.
+  rewrite IHi2.
   exact H13.
 
   (* ISeq IAdd I *)
@@ -357,7 +351,7 @@ Proof.
   apply IHi2.
   inversion H4.
   inversion H13.
-    symmetry in H14; rewrite H14 in H18; rewrite H14.
+  symmetry in H14; rewrite H14 in H18; rewrite H14.
   symmetry in H17; rewrite H17 in H13; rewrite H14 in H13.
   assumption.
 
@@ -378,3 +372,13 @@ Proof.
   pose proof Canonical_Values_label2 H Psi Gamma v H2 H11 as CVL.
   exists H.
   exists R.
+  destruct CVL as [I1 G].
+  destruct G as [l F].
+  exists I1.
+  split.
+  subst.
+  inversion H4.
+  apply R_IJmp_Succ with (I :=  (IJmp (ANum v))) (I' := I1).
+  symmetry.
+  subst.
+  apply F.
