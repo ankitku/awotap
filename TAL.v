@@ -297,88 +297,52 @@ Proof.
   inversion H4.
   inversion H4.
   inversion H4.
-  induction I1 in H4.
+
+  induction I1.
+
+  (* ISeq IAss I *)
   inversion H4.
   inversion H12.
+  
   symmetry in H16.
   rewrite H16 in H13.
   subst.
-  rewrite IHi2.
-  exact H13.
+  exists H.
+  exists (t_update R (Id d) (aeval a R)).
+  exists I2.
+  split.
+  apply R_IAss.
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
+  assumption.
+  inversion H12.
+  apply S_Regfile with (r := d) (tau := tau0).
+  assumption.
+  rewrite <- H10.
+  rewrite update_eq.
+  reflexivity.
+  assumption.
+  assumption.
 
+  
   (* ISeq IAdd I *)
   inversion H4.
   inversion H12.
   symmetry in H16.
   rewrite H16 in H13.
-  apply IHi2.
-  exact H13.
-  
-  (* ISeq ISub I *)
-  inversion H4.
-  inversion H12.
-  symmetry in H18.
-  rewrite H18 in H13.
-  apply IHi2.
-  exact H13.
-
-  (* ISeq IIf I *)
-  inversion H4.
-  inversion H12.
-  symmetry in H18.
-  rewrite H18 in H13.
-  apply IHi2.
-  exact H13.
-
-  (* ISeq ISeq I *)
-  apply IHi2.
-  inversion H4.
-  inversion H13.
-  symmetry in H14; rewrite H14 in H18; rewrite H14.
-  symmetry in H17; rewrite H17 in H13; rewrite H14 in H13.
-  assumption.
-
-  symmetry in H14.
-  rewrite H14.
-  symmetry in H19; rewrite H19 in H13; rewrite H14 in H13.
-  assumption.
-
-  apply S_Seq with (Gamma2 := Gamma3).
-  assumption.
-  assumption.
-
-  (* ISeq IJmp I *)
-  apply IHi2.
-  inversion H4.
-  inversion H13.
-  symmetry in H14; rewrite H14 in H18; rewrite H14.
-  symmetry in H17; rewrite H17 in H13; rewrite H14 in H13.
-  assumption.
-
-  symmetry in H14.
-  rewrite H14.
-  symmetry in H19; rewrite H19 in H13; rewrite H14 in H13.
-  assumption.
-
-  apply S_Seq with (Gamma2 := Gamma3).
-  assumption.
-  assumption.
-
-  (* IJmp *)
-  inversion H4.
-  symmetry in H8.
-  rewrite H8 in H4.
-  inversion H11.
-  pose proof Canonical_Values_label2 H Psi Gamma v H2 H11 as CVL.
   exists H.
-  exists R.
-  destruct CVL as [I1 G].
-  destruct G as [l F].
-  exists I1.
+  exists (t_update R (Id s) (aeval (AReg d) R + aeval (AReg s) R)).
+  exists I2.
   split.
+  apply R_IAdd.
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
+  assumption.
+  apply S_Regfile with (r := d) (tau := int).
+  assumption.
+  inversion H20.
   subst.
-  inversion H4.
-  apply R_IJmp_Succ with (I :=  (IJmp (ANum v))) (I' := I1).
-  symmetry.
+  assumption.
   subst.
-  apply F.
+  assumption.
+  assumption.
+
+  (* ISeq ISub I *)
