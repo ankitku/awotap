@@ -106,6 +106,7 @@ Qed.
      
 Inductive ty : Type :=
  | int : ty
+ | reg : ty -> ty
  | code : partial_map ty -> ty
  | arrow : partial_map ty -> partial_map ty -> ty
  | True : ty.
@@ -122,28 +123,33 @@ Definition empty_Psi : context := empty.
 (* typing rules for arithmetic expressions *)
 Inductive ahas_type : context -> context -> aexp -> ty -> Prop :=
  | S_Reg : forall Psi Gamma r tau,
-    Gamma (Id r) = Some tau -> ahas_type Psi Gamma (AReg r) tau 
+     Gamma (Id r) = Some (reg tau) -> ahas_type Psi Gamma (AReg r) (reg tau)
+ | S_RegT : forall Psi Gamma r,
+     Gamma (Id r) = Some True -> ahas_type Psi Gamma (AReg r) True
  | S_Int : forall Psi Gamma n,
     ahas_type Psi Gamma (ANum n) int
- | S_Lab : forall Psi Gamma l tau,
-    Psi (Id l) = Some tau -> ahas_type Psi Gamma (ALab l) tau.
-
+ | S_Lab1 : forall Psi Gamma l tau r R (i : instr),
+    tau = code Gamma -> Psi (Id l) = Some tau -> l = aeval (ALab r) R -> ahas_type Psi Gamma (ALab r) tau
+ | S_Lab2 : forall Psi Gamma Gamma1 Gamma2 l tau r R,
+    tau = arrow Gamma1 Gamma2 -> Psi (Id l) = Some tau -> l = aeval (ALab r) R -> ahas_type Psi Gamma (ALab r) tau.
 Hint Constructors ahas_type.
 
 (* typing rules for instructions *)
 Inductive ihas_type : context -> context -> instr -> ty -> Prop :=
- | S_Mov : forall Psi Gamma R a tau d,
-    ahas_type Psi Gamma a tau -> ahas_type Psi Gamma (AReg d) tau -> (update Gamma (Id d) tau) = Gamma -> ihas_type Psi Gamma (R(d) := aeval a R) (arrow Gamma Gamma)
+ | S_Mov : forall Psi Gamma R a d,
+    ahas_type Psi Gamma a int -> ahas_type Psi Gamma (AReg d) (reg int) -> (update Gamma (Id d) (reg int)) = Gamma -> ihas_type Psi Gamma (R(d) := aeval a R) (arrow Gamma Gamma)
  | S_Add : forall Psi Gamma s d,
-    ahas_type Psi Gamma (AReg s) int -> ahas_type Psi Gamma (AReg d) int -> update Gamma (Id d) int = Gamma -> ihas_type Psi Gamma (R(d) +:= R(s)) (arrow Gamma Gamma)
- | S_Sub : forall Psi Gamma s n,
-     ahas_type Psi Gamma (AReg s) int -> ihas_type Psi Gamma (R(s) -:= n) (arrow Gamma Gamma)
+    ahas_type Psi Gamma (AReg s) (reg int) -> ahas_type Psi Gamma (AReg d) (reg int) -> update Gamma (Id d) (reg int) = Gamma -> ihas_type Psi Gamma (R(d) +:= R(s)) (arrow Gamma Gamma)
+ | S_Sub : forall Psi Gamma s a v,
+      ahas_type Psi Gamma a int -> ahas_type Psi Gamma (AReg s) (reg int) -> a = ANum v -> ihas_type Psi Gamma (R(s) -:= v) (arrow Gamma Gamma)
  | S_If :  forall Psi Gamma r v,
-     ahas_type Psi Gamma (AReg r) int -> ahas_type Psi Gamma (ALab v) (code Gamma) -> ihas_type Psi Gamma (JIF R(r) v) (arrow Gamma Gamma)
- | S_Jmp :  forall Psi Gamma a R v,
-     ahas_type Psi Gamma a (code Gamma) -> aeval a R = v -> ihas_type Psi Gamma (JMP v) (code Gamma)
+     ahas_type Psi Gamma (AReg r) (reg int) -> ahas_type Psi Gamma (ALab v) (code Gamma) -> ihas_type Psi Gamma (JIF R(r) v) (arrow Gamma Gamma)
+ | S_Jmp :  forall Psi Gamma v,
+     ahas_type Psi Gamma (ALab v) (code Gamma) -> ihas_type Psi Gamma (JMP v) (code Gamma)
+ | S_JmpR :  forall Psi Gamma v,
+     ahas_type Psi Gamma (AReg v) ( reg (code Gamma)) -> ihas_type Psi Gamma (JMP R(v)) (code Gamma)
  | S_JmpT :  forall Psi Gamma v r,
-     Gamma (Id r) = Some True -> update Gamma (Id r) True = Gamma -> ahas_type Psi Gamma (AReg v) True -> ihas_type Psi Gamma (IJmp (AReg v)) (code Gamma)
+     Gamma (Id r) = Some True -> update Gamma (Id r) True = Gamma -> ahas_type Psi Gamma (AReg v) True -> ihas_type Psi Gamma (JMP R(v)) (code Gamma)
  | S_Seq :  forall Psi i1 i2 Gamma Gamma2,
      ihas_type Psi Gamma i1 (arrow Gamma Gamma2) -> ihas_type Psi Gamma i2 (code Gamma2) -> ihas_type Psi Gamma (ISeq i1 i2) (code Gamma).
 
@@ -170,7 +176,7 @@ Inductive M_ok : heaps -> registers -> instr -> Prop :=
 Hint Constructors M_ok.
 
 
-Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) int) (Id 2) int) (Id 3) int) (Id 4) True.
+Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) (reg int)) (Id 2) (reg int)) (Id 3) (reg int)) (Id 4) True.
 Check init_Gamma.
 
 Definition init_Psi : context := update (update (update empty_Psi (Id 1) (code init_Gamma))(Id 3) (code init_Gamma)) (Id 2) (code init_Gamma).
@@ -178,7 +184,7 @@ Definition init_Psi : context := update (update (update empty_Psi (Id 1) (code i
 
 Ltac match_map := repeat (try rewrite update_neq; try rewrite update_eq; try reflexivity).
 Ltac inequality := (rewrite <- beq_id_false_iff; trivial).
-Ltac crush_map := match_map ; inequality.
+Ltac crush_map := match_map ; inequality; try reflexivity.
 
 Lemma heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> ihas_type init_Psi init_Gamma I (code init_Gamma).
 Proof.
@@ -193,9 +199,12 @@ Proof.
   apply S_Reg.
   unfold init_Gamma.
   crush_map.
-  apply S_Lab.
+  apply S_Lab1 with (l := 3) (R := R).
+  exact I.
+  reflexivity.
   unfold init_Psi.
   crush_map.
+  trivial.
   apply S_Seq with (Gamma2 := init_Gamma).
   apply S_Add.
   apply S_Reg.
@@ -208,12 +217,17 @@ Proof.
   unfold init_Gamma.
   crush_map.
   apply S_Seq with (Gamma2 := init_Gamma).
-  apply S_Sub.
+  unfold init_Psi.
+  apply S_Sub with (a := ANum 1).
+  apply S_Int.
   apply S_Reg.
   unfold init_Gamma.
   crush_map.
-  apply S_Jmp with (a := ALab 2) (R := init_regs).
-  apply S_Lab.
+  reflexivity.
+  apply S_Jmp.
+  apply S_Lab1 with (l := 2) (R := R).
+  exact I.
+  reflexivity.
   unfold init_Psi.
   apply update_eq.
   crush_map.
@@ -234,7 +248,7 @@ Proof.
   apply update_same.
   unfold init_Gamma.
   apply update_eq.
-  apply S_Reg.
+  apply S_RegT.
   unfold init_Gamma.
   apply update_eq.
 Qed.
@@ -242,26 +256,34 @@ Qed.
 Lemma Canonical_Values_Int : forall H Psi Gamma v tau, Hhas_type H Psi -> ahas_type Psi Gamma v tau -> tau = int -> exists n, v = ANum n.
 Proof.
   intros.
-  inversion H1.
   subst.
-  exists r.
   inversion H1.
-  exists n; reflexivity.
-  exists s; reflexivity.
+  exists n.
+  reflexivity.
+  inversion H2.
+  inversion H2.
 Qed.
 
-Lemma Canonical_Values_Reg :forall H Psi Gamma r R tau v, Hhas_type H Psi -> Rhas_type Psi R Gamma -> v = AReg r -> ahas_type Psi Gamma v tau -> tau = (reg int) -> exists n, R (Id r) = n.
+Lemma Canonical_Values_Reg :forall H Psi Gamma r R, Hhas_type H Psi -> Rhas_type Psi R Gamma -> ahas_type Psi Gamma (AReg r) (reg int) -> exists (n : nat), R (Id r) = n.
 Proof.
   intros.
   exists (R (Id r)).
   reflexivity.
 Qed.
 
-Lemma Canonical_Values_label1 : forall H Psi Gamma r R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (code Gamma) -> exists i, ihas_type Psi Gamma i (code Gamma) -> exists l, l = R (Id r) -> Some i = H (Id l).
+Lemma Canonical_Values_label1 : forall H Psi Gamma r R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (reg (code Gamma)) -> exists i, ihas_type Psi Gamma i (code Gamma) -> Some i = H (Id (aeval (AReg r) R)).
 Proof.
   intros.
-  inversion H0.
   inversion H1.
+  inversion H0.
+  subst.
+  exists i.
+  intros.
+  inversion H2.
+  inversion H3.
+  simpl.
+  subst.
+  inversion H2.
 Qed.
 
 Lemma Canonical_Values_label2 : forall H Psi Gamma v, Hhas_type H Psi -> ahas_type Psi Gamma (ANum v) (code Gamma) -> exists i, ihas_type Psi Gamma i (code Gamma) -> exists l,  Some i = H (Id v) -> v = l.
