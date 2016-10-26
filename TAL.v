@@ -177,17 +177,7 @@ Inductive Rhas_type : cmbnd_ctx -> registers -> context -> Prop :=
 
 Hint Constructors Rhas_type.
 
-(* typing rules for heap*)
-Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
-  | S_Heap : forall Psi H i tau, ihas_type (PsiCtx Psi) i tau -> (forall l, Psi (Id l) = Some tau -> H (Id l) = Some i) -> (forall Gamma, tau = code Gamma) -> Hhas_type EmptyCtx H Psi.
 
-Hint Constructors Hhas_type.
-
-(* typing rules for Machine State *)
-Inductive M_ok : cmbnd_ctx -> heaps -> registers -> instr -> Prop :=
- | S_Mach : forall H R I Psi Gamma, Hhas_type EmptyCtx H Psi -> Rhas_type (PsiCtx Psi) R Gamma -> ihas_type (PsiCtx Psi) I (code Gamma) -> M_ok EmptyCtx H R I.
-
-Hint Constructors M_ok.
 
 (*
 Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) (reg int)) (Id 2) (reg int)) (Id 3) (reg int)) (Id 4) True.
@@ -267,6 +257,18 @@ Proof.
 Qed.
 *)
 
+(* typing rules for heap*)
+Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
+  | S_Heap : forall Psi H, (forall Gamma i l, Psi (Id l) = Some (code Gamma) -> H (Id l) = Some i -> ihas_type (PsiCtx Psi) i (code Gamma)) -> Hhas_type EmptyCtx H Psi.
+
+Hint Constructors Hhas_type.
+
+(* typing rules for Machine State *)
+Inductive M_ok : cmbnd_ctx -> heaps -> registers -> instr -> Prop :=
+ | S_Mach : forall H R I Psi Gamma, Hhas_type EmptyCtx H Psi -> Rhas_type (PsiCtx Psi) R Gamma -> ihas_type (PsiCtx Psi) I (code Gamma) -> M_ok EmptyCtx H R I.
+
+Hint Constructors M_ok.
+
 Lemma Canonical_Values_Int : forall H Psi Gamma v tau, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) v tau -> tau = int -> exists n, v = ANum n.
 Proof.
   intros.
@@ -284,7 +286,7 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma Canonical_Values_label1 : forall H Psi Gamma v, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) -> exists i, H (Id v) = Some i.
+Lemma Canonical_Values_label1 : forall H Psi Gamma v i, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) -> Psi (Id v) = Some (code Gamma) -> H (Id v) = Some i -> ihas_type (PsiCtx Psi) i (code Gamma).
 Proof.
   intros.
   inversion H0.
@@ -292,9 +294,9 @@ Proof.
   inversion H12.
   simpl in H17.
   subst.
-  exists i.
-  apply H4 with (l := v).
-  rewrite H5 with (Gamma := Gamma).
+  specialize H5 with (Gamma := Gamma) (i := i) (l := v).
+  apply H5.
+  assumption.
   assumption.
 Qed.
 (*
