@@ -35,7 +35,7 @@ Inductive instr : Type :=
 
 Notation "'R(' d ')' ':=' a" :=
   (IMov d (ANum a)) (at level 60).
-Notation "'R(' s ')' '+:=' 'R(' d ')'" :=
+Notation "'R(' d ')' '+:=' 'R(' s ')'" :=
   (IAdd d s) (at level 60).
 Notation "'R(' s ')' '-:=' v" :=
   (ISub s v) (at level 60).
@@ -69,11 +69,11 @@ Inductive ieval : st -> st -> Prop :=
  | R_IMov : forall H R I d a,
     ieval (St H R (R(d) := a ;; I)) (St H (t_update R (Id d) a) I)
  | R_IAdd : forall H R I d s,
-     ieval (St H R (R(d) +:= R(s) ;; I)) (St H (t_update R (Id s) (aeval (AReg d) R + aeval (AReg s) R)) I)
+     ieval (St H R (R(d) +:= R(s) ;; I)) (St H (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)) I)
  | R_ISub : forall H R I d v,
      ieval (St H R (R(d) -:= v ;; I)) (St H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) I)
- | R_IJmp_Succ : forall H R I' a,
-     H (Id (aeval a R)) = Some I' -> ieval (St H R (JMP (aeval a R))) (St H R I')
+ | R_IJmp_Succ : forall H R I' a l,
+     l = (aeval a R) -> H (Id l) = Some I' -> ieval (St H R (JMP l)) (St H R I')
  | R_IJmp_Fail : forall H R I a,
      H (Id (aeval a R)) = None -> ieval (St H R I) (St H R I)
  | R_IIf_EQ : forall H R I r v,
@@ -101,7 +101,13 @@ Proof.
   apply R_ISeq with (St init_heap (t_update init_regs (Id 3) 0) (IJmp (ALab 2))).
   apply R_IMov.
   apply R_IJmp_Succ with (a := ALab 2).
+  simpl.
   reflexivity.
+  unfold init_heap.
+  rewrite update_neq.
+  rewrite update_eq.
+  reflexivity.
+  rewrite <- beq_id_false_iff; trivial.
 Qed.
      
 Inductive ty : Type :=
@@ -128,17 +134,17 @@ Inductive ahas_type : context -> context -> aexp -> ty -> Prop :=
      Gamma (Id r) = Some True -> ahas_type Psi Gamma (AReg r) True
  | S_Int : forall Psi Gamma n,
     ahas_type Psi Gamma (ANum n) int
- | S_Lab1 : forall Psi Gamma l tau r R (i : instr),
-    tau = code Gamma -> Psi (Id l) = Some tau -> l = aeval (ALab r) R -> ahas_type Psi Gamma (ALab r) tau
- | S_Lab2 : forall Psi Gamma Gamma1 Gamma2 l tau r R,
-    tau = arrow Gamma1 Gamma2 -> Psi (Id l) = Some tau -> l = aeval (ALab r) R -> ahas_type Psi Gamma (ALab r) tau.
+ | S_Lab1 : forall Psi Gamma l r R (i : instr),
+     Psi (Id l) = Some (code Gamma) -> l = aeval (ALab r) R -> ahas_type Psi Gamma (ALab r) (code Gamma)
+ | S_Lab2 : forall Psi Gamma Gamma1 Gamma2 l r R,
+     Psi (Id l) = Some (arrow Gamma1 Gamma2) -> l = aeval (ALab r) R -> ahas_type Psi Gamma (ALab r) (arrow Gamma1 Gamma2).
 Hint Constructors ahas_type.
 
 (* typing rules for instructions *)
 Inductive ihas_type : context -> context -> instr -> ty -> Prop :=
  | S_Mov : forall Psi Gamma R a d,
     ahas_type Psi Gamma a int -> ahas_type Psi Gamma (AReg d) (reg int) -> (update Gamma (Id d) (reg int)) = Gamma -> ihas_type Psi Gamma (R(d) := aeval a R) (arrow Gamma Gamma)
- | S_Add : forall Psi Gamma s d,
+ | S_Add : forall Psi Gamma d s,
     ahas_type Psi Gamma (AReg s) (reg int) -> ahas_type Psi Gamma (AReg d) (reg int) -> update Gamma (Id d) (reg int) = Gamma -> ihas_type Psi Gamma (R(d) +:= R(s)) (arrow Gamma Gamma)
  | S_Sub : forall Psi Gamma s a v,
       ahas_type Psi Gamma a int -> ahas_type Psi Gamma (AReg s) (reg int) -> a = ANum v -> ihas_type Psi Gamma (R(s) -:= v) (arrow Gamma Gamma)
@@ -165,7 +171,7 @@ Hint Constructors Rhas_type.
 
 (* typing rules for heap*)
 Inductive Hhas_type : heaps -> context -> Prop :=
-  | S_Heap : forall Psi Gamma H l tau i, Psi (Id l) = Some tau -> H (Id l) = Some i -> ihas_type Psi Gamma i tau -> Hhas_type H Psi.
+  | S_Heap : forall Psi Gamma H tau i l, Psi (Id l) = Some tau -> ihas_type Psi Gamma i tau -> H (Id l) = Some i -> Hhas_type H Psi.
 
 Hint Constructors Hhas_type.
 
@@ -229,8 +235,7 @@ Proof.
   exact I.
   reflexivity.
   unfold init_Psi.
-  apply update_eq.
-  crush_map.
+  trivial.
   rewrite <- beq_id_false_iff.
   trivial.  
 Qed.
@@ -260,8 +265,6 @@ Proof.
   inversion H1.
   exists n.
   reflexivity.
-  inversion H2.
-  inversion H2.
 Qed.
 
 Lemma Canonical_Values_Reg :forall H Psi Gamma r R, Hhas_type H Psi -> Rhas_type Psi R Gamma -> ahas_type Psi Gamma (AReg r) (reg int) -> exists (n : nat), R (Id r) = n.
@@ -271,29 +274,29 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma Canonical_Values_label1 : forall H Psi Gamma r R, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (reg (code Gamma)) -> exists i, ihas_type Psi Gamma i (code Gamma) -> Some i = H (Id (aeval (AReg r) R)).
+Lemma Canonical_Values_label1 : forall H Psi Gamma v, Hhas_type H Psi -> ahas_type Psi Gamma (ALab v) (code Gamma) -> exists i l, v = l -> H (Id v) = Some i.
 Proof.
   intros.
-  inversion H1.
   inversion H0.
-  subst.
   exists i.
+  exists l.
   intros.
-  inversion H2.
-  inversion H3.
-  simpl.
-  subst.
-  inversion H2.
+  symmetry in H8.
+  rewrite H8 in H5.
+  assumption.  
 Qed.
 
-Lemma Canonical_Values_label2 : forall H Psi Gamma v, Hhas_type H Psi -> ahas_type Psi Gamma (ANum v) (code Gamma) -> exists i, ihas_type Psi Gamma i (code Gamma) -> exists l,  Some i = H (Id v) -> v = l.
+Lemma Canonical_Values_label2 : forall H Psi Gamma r, Hhas_type H Psi -> ahas_type Psi Gamma (AReg r) (reg (code Gamma)) -> exists i l, ihas_type Psi Gamma i (code Gamma) -> H (Id l) = Some i.
 Proof.
   intros.
   inversion H0.
-  inversion H1.
-
-  assumption.
+  exists i.
+  exists l.
+  intros.
+  inversion H5.
+  reflexivity.
 Qed.
+
 
 Ltac crush_assumptions := repeat (try subst; try assumption).  
   
@@ -309,7 +312,7 @@ Proof.
 
   induction I1.
 
-  (* ISeq IAss I *)
+  (* ISeq IMov I *)
   inversion H4.
   inversion H12.
   
@@ -317,15 +320,14 @@ Proof.
   rewrite H16 in H13.
   subst.
   exists H.
-  exists (t_update R (Id d) (aeval a R)).
+  exists (t_update R (Id d) (aeval a0 R1)).
   exists I2.
   split.
-  apply R_IAss.
+  apply R_IMov.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
   inversion H12.
-  apply S_Regfile with (r := d) (tau := tau0).
-  assumption.
+  apply S_Regfile with (r := d) (tau := reg int).
   rewrite <- H10.
   rewrite update_eq.
   reflexivity.
@@ -339,24 +341,26 @@ Proof.
   symmetry in H16.
   rewrite H16 in H13.
   exists H.
-  exists (t_update R (Id s) (aeval (AReg d) R + aeval (AReg s) R)).
+  exists (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)).
   exists I2.
   split.
   apply R_IAdd.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
-  apply S_Regfile with (r := d) (tau := int).
-  assumption.
-  inversion H20.
+  apply S_Regfile with (r := d) (tau := reg int).
   subst.
-  assumption.
+  rewrite <- H21.
+  apply update_eq.
   crush_assumptions.
-  assumption.
+  inversion H20.
+  crush_assumptions.
+  crush_assumptions.
 
   (* ISeq ISub I *)
   inversion H4.
-  inversion H12.
-  rewrite H18 in H13.
+  inversion H8.
+  symmetry in H12.
+  rewrite H12 in H16.
   exists H.
   exists (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)).
   exists I2.
@@ -364,33 +368,38 @@ Proof.
   apply R_ISub.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
-  apply S_Regfile with (r := d) (tau := int).
-  assumption.
-  inversion H19.
+  apply S_Regfile with (r := d) (tau := reg int).
+  inversion H16.
   crush_assumptions.
   crush_assumptions.
   crush_assumptions.
-
 
   Focus 4.
   (*IJmp*)
   inversion H4.
+  inversion H2.
+  inversion H11.
+  subst.
+  simpl in H20.
   exists H.
   exists R.
-  pose proof Canonical_Values_label2 H Psi Gamma v H2 H11 as CVL2.
+  pose proof Canonical_Values_label1 H Psi Gamma v H2 H11 as CVL2.
   destruct CVL2 as [I' CVL2'].
-  destruct CVL2' as [l CVL'].
+  destruct CVL2' as [k CVL'].
   exists I'.
   split.
-  apply R_IJmp_Succ.
-  symmetry.
+  apply R_IJmp_Succ with (a := ALab v).
+  trivial.
   apply CVL'.
+  subst.
+  reflexivity.
   
 
   
   (* ISeq IIf I *)
   inversion H4.
   inversion H12.
+  reflexivity.
   symmetry in H18.
   rewrite H18 in H13.
   exists H.
