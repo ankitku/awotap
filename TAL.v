@@ -259,7 +259,7 @@ Qed.
 
 (* typing rules for heap*)
 Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
-  | S_Heap : forall Psi H, (forall Gamma i l, Psi (Id l) = Some (code Gamma) -> H (Id l) = Some i -> ihas_type (PsiCtx Psi) i (code Gamma)) -> Hhas_type EmptyCtx H Psi.
+  | S_Heap : forall Psi H, (forall Gamma l, exists i, Psi (Id l) = Some (code Gamma) /\ H (Id l) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma)) -> Hhas_type EmptyCtx H Psi.
 
 Hint Constructors Hhas_type.
 
@@ -286,18 +286,18 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma Canonical_Values_label1 : forall H Psi Gamma v i, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) -> Psi (Id v) = Some (code Gamma) -> H (Id v) = Some i -> ihas_type (PsiCtx Psi) i (code Gamma).
+Lemma Canonical_Values_label1 : forall H Psi Gamma v, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) ->  Psi (Id v) = Some (code Gamma) -> exists i, H (Id v) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
 Proof.
   intros.
   inversion H0.
   inversion H1.
-  inversion H12.
-  simpl in H17.
+  inversion H11.
+  simpl in H16.
   subst.
-  specialize H5 with (Gamma := Gamma) (i := i) (l := v).
-  apply H5.
-  assumption.
-  assumption.
+  specialize H4 with (Gamma := Gamma) ( l := v).
+  destruct H4 as [i G].
+  exists i.
+  apply G.
 Qed.
 (*
 Lemma Canonical_Values_label2 : forall H Psi Gamma r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg (code Gamma)) -> exists i l, ihas_type (PsiCtx Psi) i (code Gamma) -> H (Id l) = Some i.
@@ -395,35 +395,26 @@ Proof.
   inversion H16.
   simpl in H21.
   subst.
-  pose proof Canonical_Values_label1 H Psi Gamma v H2 H11 as CVL1.
-  exists H.
-  exists R.  
+
+  pose proof Canonical_Values_label1 H Psi Gamma v H2 H11 H20 as CVL1.
   destruct CVL1 as [i G].
+
+  exists H.
+  exists R.
   exists i.
+
   split.
+  
   apply R_IJmp_Succ with (a := ALab v).
   simpl.
   reflexivity.
-  assumption.
+  apply G.
 
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
   assumption.
 
-  inversion H2.
-
-  
-  inversion H11.
-  subst.
-
-  
-    inversion H22.
-
-  exists I'.
-  split.
-  trivial.
-  subst.
-  reflexivity.
+  apply G.
   
 
   
