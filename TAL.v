@@ -498,3 +498,12 @@ Proof.
   assumption.
   assumption.
   assumption.
+
+  (*(I1_1;;I1_2);;I2*)
+  inversion H4.
+  inversion H12.
+
+  (*IJmp a;; I2*)
+  inversion H4.
+  inversion H12.
+Qed.  
