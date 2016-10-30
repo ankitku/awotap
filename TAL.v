@@ -78,8 +78,8 @@ Inductive ieval : st -> st -> Prop :=
      H (Id (R (Id r))) = Some I' -> ieval (St H R (JMP R(r))) (St H R I')
  | R_IJmp_Fail : forall H R I a,
      H (Id (aeval a R)) = None -> ieval (St H R I) (St H R I)
- | R_IIf_EQ : forall H R I r v,
-     aeval (AReg r) R = 0 -> (H (Id v)) = Some I -> ieval (St H R (JIF R(r) v)) (St H R I)
+ | R_IIf_EQ : forall H R I I2 r v,
+     aeval (AReg r) R = 0 -> (H (Id v)) = Some I2 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I2)
  | R_IIf_NEQ : forall H R I r v,
      aeval (AReg r) R <> 0 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I)   
  | R_ISeq : forall st st' st'',
@@ -455,28 +455,46 @@ Proof.
   assumption.
   apply G.
 
-   (*IJmpR*)
   inversion H18. (*impossible case*)
 
   
   (* ISeq IIf I *)
   inversion H4.
   inversion H12.
-  reflexivity.
-  symmetry in H18.
-  rewrite H18 in H13.
+  symmetry in H19.
+  rewrite H19 in H13.
+  subst.
+  inversion H20.
+  inversion H8.
+  subst.
+  simpl in H14.
+  remember (R (Id d)) as rd; destruct rd.
+  pose proof Canonical_Values_label1 H Psi Gamma v H2 H20 H14 as CVL1.
+  destruct CVL1 as [I' G].
+  exists H.
+  exists R.
+  exists I'.
+  split.
+  apply R_IIf_EQ.
+  simpl.
+  symmetry in Heqrd; assumption.
+  apply G.
+  
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma). 
+  assumption.
+  assumption.
+  apply G.
+
   exists H.
   exists R.
   exists I2.
   split.
-  subst.
-  
-  pose proof Canonical_Values_reg H Psi Gamma d R H2 H3 H19 as CVR.
-  destruct CVR.
-  induction x.
-  apply R_IIf_EQ with (v := v) (r := d).
-  unfold aeval.
+  apply R_IIf_NEQ.
+  simpl.
+  symmetry in Heqrd; rewrite Heqrd.
+  apply beq_nat_false_iff.
+  trivial.
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma). 
   assumption.
-  pose proof Canonical_Values_label2 H Psi Gamma v H2 H20 as CVL2.
-  symmetry.
-  
+  assumption.
+  assumption.
