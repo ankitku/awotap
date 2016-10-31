@@ -1,6 +1,10 @@
-(* TAL-0 control flow safety *)
+(** * TAL-0 Typed Assembly Language *)
 
-Require Import Bool Arith Vector Maps.
+(** Based on paper by Greg Morrisett , TAL-0 is the design of a RISC-style typed assembly language which focuses on control-flow safety. *)
+
+Require Import Bool Arith Vector.
+Require Import LibTactics.
+Require Import Maps.
 
 Definition registers := total_map nat.
 Definition empty_regs : registers := t_empty 0.
@@ -137,14 +141,14 @@ Inductive cmbnd_ctx :=
 Inductive ahas_type : cmbnd_ctx -> aexp -> ty -> Prop :=
  | S_Reg : forall Psi Gamma r,
      Gamma (Id r) = Some (reg int) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg int)
+ | S_RegV : forall Psi Gamma l v R,
+     Psi (Id l) = Some (code Gamma) -> l = aeval (AReg v) R -> ahas_type (PsiGammaCtx Psi Gamma) (AReg v) (code Gamma)
  | S_RegT : forall Psi Gamma r,
      Gamma (Id r) = Some True -> (forall R, Psi (Id (R (Id r))) = Some (code Gamma)) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True
  | S_Int : forall Psi n,
      ahas_type (PsiCtx Psi) (ANum n) int
- | S_Lab1 : forall Psi Gamma l v R,
+ | S_Lab : forall Psi Gamma l v R,
      Psi (Id l) = Some (code Gamma) -> l = aeval (ALab v) R -> ahas_type (PsiCtx Psi) (ALab v) (code Gamma)
- | S_Lab2 : forall Psi Gamma1 Gamma2 l v R,
-     Psi (Id l) = Some (arrow Gamma1 Gamma2) -> l = aeval (ALab v) R -> ahas_type (PsiCtx Psi) (ALab v) (arrow Gamma1 Gamma2)
  | S_Val : forall Psi Gamma a tau,
      ahas_type (PsiCtx Psi) a tau -> ahas_type (PsiGammaCtx Psi Gamma) a tau.
 
@@ -154,9 +158,9 @@ Hint Constructors ahas_type.
 Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
  | S_Jmp :  forall Psi Gamma v,
      ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) -> ihas_type (PsiCtx Psi) (JMP v) (code Gamma)
- | S_JmpR :  forall Psi Gamma v (R : registers),
+ | S_JmpR :  forall Psi Gamma v,
      ahas_type (PsiGammaCtx Psi Gamma) (AReg v) ( reg (code Gamma)) -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma)
- | S_JmpT :  forall Psi Gamma v r (R : registers),
+ | S_JmpT :  forall Psi Gamma v r,
      Gamma (Id r) = Some True -> update Gamma (Id r) True = Gamma -> ahas_type (PsiGammaCtx Psi Gamma) (AReg v) True -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma) 
  | S_Mov : forall Psi Gamma R d a tau,
     ahas_type (PsiGammaCtx Psi Gamma) a tau -> ahas_type (PsiGammaCtx Psi Gamma) (AReg d) (reg tau) -> (update Gamma (Id d) (reg tau)) = Gamma -> ihas_type (PsiCtx Psi) (R(d) := aeval a R) (arrow Gamma Gamma)
@@ -181,7 +185,6 @@ Hint Constructors Rhas_type.
 
 
 
-(*
 Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) (reg int)) (Id 2) (reg int)) (Id 3) (reg int)) (Id 4) True.
 Check init_Gamma.
 
@@ -192,22 +195,37 @@ Ltac match_map := repeat (try rewrite update_neq; try rewrite update_eq; try ref
 Ltac inequality := (rewrite <- beq_id_false_iff; trivial).
 Ltac crush_map := match_map ; inequality; try reflexivity.
 
-Lemma heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> ihas_type init_Psi init_Gamma I (code init_Gamma).
+
+
+Ltac crush_assumptions := repeat (try subst; try assumption).  
+
+Ltac crush :=
+  repeat match goal with
+           | [ H : ?T      |- ?T     ]  => assumption
+           | [ H : _ /\ _  |- _      ]  => destruct H
+           | [             |- _ /\ _  ]  => refine (conj _ _)
+           | [ H : _ = _   |- _  ]  => rewrite H
+           | [             |- _ -> _                ] => intro
+           | [ H : ihas_type _ _ _ |- _ ] => inverts H
+           | _                      => trivial
+         end.
+
+
+Lemma heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> ihas_type (PsiCtx init_Psi) I (code init_Gamma).
 Proof.
   intros.
   unfold init_heap in H.
   rewrite update_neq in H.
   rewrite update_eq in H.
   symmetry in H.
-  inversion H.  
+  inverts H.
   apply S_Seq with (Gamma2 := init_Gamma).
   apply S_If.
   apply S_Reg.
   unfold init_Gamma.
   crush_map.
-  apply S_Lab1 with (l := 3) (R := R).
-  exact I.
-  reflexivity.
+  apply S_Val.
+  apply S_Lab with (l := 3) (R := R).
   unfold init_Psi.
   crush_map.
   trivial.
@@ -225,39 +243,24 @@ Proof.
   apply S_Seq with (Gamma2 := init_Gamma).
   unfold init_Psi.
   apply S_Sub with (a := ANum 1).
+  unfold init_Psi.
+  apply S_Val.
   apply S_Int.
   apply S_Reg.
   unfold init_Gamma.
   crush_map.
   reflexivity.
   apply S_Jmp.
-  apply S_Lab1 with (l := 2) (R := R).
-  exact I.
-  reflexivity.
+  apply S_Val.
+  apply S_Lab with (l := 2) (R := R).
   unfold init_Psi.
   trivial.
+  trivial.
   rewrite <- beq_id_false_iff.
-  trivial.  
+  trivial.
 Qed.
                    
-Lemma heap_1_type : forall I, (init_heap (Id 3)) = Some I -> ihas_type init_Psi init_Gamma I (code init_Gamma).
-Proof.
-  intros.
-  unfold init_heap in H.
-  rewrite update_eq in H.
-  symmetry in H.
-  inversion H.
-  apply S_JmpT with (r := 4).
-  unfold init_Gamma.
-  apply update_eq.
-  apply update_same.
-  unfold init_Gamma.
-  apply update_eq.
-  apply S_RegT.
-  unfold init_Gamma.
-  apply update_eq.
-Qed.
-*)
+
 
 (* typing rules for heap*)
 Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
@@ -328,8 +331,6 @@ Proof.
   apply G.
  Qed.
 
-Ltac crush_assumptions := repeat (try subst; try assumption).  
-  
 Theorem Soundness : forall H R I, M_ok EmptyCtx H R I -> exists H' R' I', ieval (St H R I) (St H' R' I') /\ M_ok EmptyCtx H' R' I'.
 Proof.
   intros.
