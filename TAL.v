@@ -146,9 +146,9 @@ Inductive ahas_type : cmbnd_ctx -> aexp -> ty -> Prop :=
  | S_Reg : forall Psi Gamma r,
      Gamma (Id r) = Some (reg int) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg int)
  | S_RegV : forall Psi Gamma r,
-     Gamma (Id r) = Some (code Gamma) -> (forall R, Psi (Id (R (Id r))) = Some (code Gamma)) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg (code Gamma))
+     (forall R, Psi (Id (R (Id r))) = Some (code Gamma)) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg (code Gamma))
  | S_RegT : forall Psi Gamma r,
-     Gamma (Id r) = Some True -> update Gamma (Id r) True = Gamma -> (forall R, Psi (Id (R (Id r))) = Some True ) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True
+     (forall R, Psi (Id (R (Id r))) = Some True) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True
  | S_Val : forall Psi Gamma a tau,
      ahas_type (PsiCtx Psi) a tau -> ahas_type (PsiGammaCtx Psi Gamma) a tau.
 
@@ -178,8 +178,7 @@ Hint Constructors ihas_type.
 
 (* typing rules for register file *)
 Inductive Rhas_type : cmbnd_ctx -> registers -> context -> Prop :=
- | S_Regfile : forall Psi Gamma R r tau,
-    (Gamma (Id r)) = Some tau -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) tau -> Rhas_type (PsiCtx Psi) R Gamma.
+ | S_Regfile : forall Psi Gamma R r tau a, (Gamma (Id r)) = Some tau -> aeval a R = R (Id r) -> ahas_type (PsiGammaCtx Psi Gamma) a tau -> Rhas_type (PsiCtx Psi) R Gamma.
 
 Hint Constructors Rhas_type.
 
@@ -359,11 +358,16 @@ Proof.
   apply R_IMov.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
-  apply S_Regfile with (r := d) (tau := reg tau).
+  apply S_Regfile with (r := d) (tau := reg tau) (a := AReg d).
+  
   rewrite H18 in H21.
   rewrite <- H21.
+  intros.
+
   rewrite update_eq.
   reflexivity.
+  crush_assumptions.
+  trivial.
   crush_assumptions.
   crush_assumptions.
 
@@ -380,12 +384,14 @@ Proof.
   apply R_IAdd.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
-  apply S_Regfile with (r := d) (tau := reg int).
+  apply S_Regfile with (a := AReg d) (r := d) (tau := reg int).
   subst.
   rewrite <- H21.
   apply update_eq.
   crush_assumptions.
   inversion H20.
+  trivial.
+  trivial.
   crush_assumptions.
   crush_assumptions.
 
@@ -401,11 +407,13 @@ Proof.
   apply R_ISub.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma).
   assumption.
-  apply S_Regfile with (r := d) (tau := reg int).
+  apply S_Regfile with (a := AReg d) (r := d) (tau := reg int).
   inversion H20.
   rewrite H18 in H23.
   crush_assumptions.
   inversion H26.
+  trivial.
+  
   crush_assumptions.
   crush_assumptions.
   
@@ -487,10 +495,12 @@ Proof.
 
   (*IJmpR*)
   inversion H11.
-  specialize H16 with (R := R).
+
+  inversion H3.
+  specialize (H13 R).
   subst.
 
-  pose proof Canonical_Values_label2 H Psi Gamma R v H2 H11 H16 as CVL2.
+  pose proof Canonical_Values_label2 H Psi Gamma R v H2 H11 H13 as CVL2.
   destruct CVL2 as [i G].
 
   exists H.
@@ -512,9 +522,9 @@ Proof.
 
   (*IJmpT*)
   inversion H11.
-  specialize H17 with (R := R).
+  specialize H13 with (R := R).
 
-  pose proof Canonical_Values_label3 H Psi Gamma R v H2 H11 H17 as CVL3.
+  pose proof Canonical_Values_label3 H Psi Gamma R v H2 H11 H13 as CVL3.
   destruct CVL3 as [i G].
 
   exists H.
