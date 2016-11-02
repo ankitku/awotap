@@ -161,7 +161,7 @@ Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
  | S_JmpR :  forall Psi Gamma v,
      ahas_type (PsiGammaCtx Psi Gamma) (AReg v) ( reg (code Gamma)) -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma)
  | S_JmpT :  forall Psi Gamma v,
-     ahas_type (PsiGammaCtx Psi Gamma) (AReg v) True -> ihas_type (PsiCtx Psi) (JMP R(v)) True
+     ahas_type (PsiGammaCtx Psi Gamma) (AReg v) True -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma)
  | S_Mov : forall Psi Gamma R d a tau,
     ahas_type (PsiGammaCtx Psi Gamma) a tau -> ahas_type (PsiGammaCtx Psi Gamma) (AReg d) (reg tau) -> (update Gamma (Id d) (reg tau)) = Gamma -> ihas_type (PsiCtx Psi) (R(d) := aeval a R) (arrow Gamma Gamma)
  | S_Add : forall Psi Gamma d s,
@@ -319,16 +319,16 @@ Proof.
   apply G.
 Qed.
 
-Lemma Canonical_Values_label3 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True ->  Psi (Id (R (Id r))) = Some True -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i True.
+Lemma Canonical_Values_label3 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True ->  Psi (Id (R (Id r))) = Some True -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
 Proof.
   intros.
   inversion H0.
   inversion H1.
-  specialize H4 with ( l := R (Id r)) (tau := True).
+  specialize H4 with ( l := R (Id r)) (tau := (code Gamma)).
   destruct H4 as [i G].
   exists i.
   apply G.
-  specialize H4 with ( l := R (Id r)) (tau := True).
+  specialize H4 with ( l := R (Id r)) (tau := (code Gamma)).
   destruct H4 as [i G].
   exists i.
   apply G.
@@ -508,5 +508,29 @@ Proof.
   apply G.
 
   (*S_Val applied to S_JmpR, impossible case.*)
+  inversion H16.
+
+  (*IJmpT*)
+  inversion H11.
+  specialize H17 with (R := R).
+
+  pose proof Canonical_Values_label3 H Psi Gamma R v H2 H11 H17 as CVL3.
+  destruct CVL3 as [i G].
+
+  exists H.
+  exists R.
+  exists i.
+
+  split.
+  
+  apply R_IJmpR_Succ.
+  apply G.
+
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
+  assumption.
+  assumption.
+  apply G.
+
+  (*S_Val applied to S_JmpT, impossible case.*)
   inversion H16.
 Qed.  
