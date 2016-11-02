@@ -139,16 +139,16 @@ Inductive cmbnd_ctx :=
 
 (* typing rules for arithmetic expressions *)
 Inductive ahas_type : cmbnd_ctx -> aexp -> ty -> Prop :=
- | S_Reg : forall Psi Gamma r,
-     Gamma (Id r) = Some (reg int) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg int)
- | S_RegV : forall Psi Gamma l v R,
-     Psi (Id l) = Some (code Gamma) -> l = aeval (AReg v) R -> ahas_type (PsiGammaCtx Psi Gamma) (AReg v) (code Gamma)
- | S_RegT : forall Psi Gamma r,
-     Gamma (Id r) = Some True -> (forall R, Psi (Id (R (Id r))) = Some (code Gamma)) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True
  | S_Int : forall Psi n,
      ahas_type (PsiCtx Psi) (ANum n) int
  | S_Lab : forall Psi Gamma l v R,
      Psi (Id l) = Some (code Gamma) -> l = aeval (ALab v) R -> ahas_type (PsiCtx Psi) (ALab v) (code Gamma)
+ | S_Reg : forall Psi Gamma r,
+     Gamma (Id r) = Some (reg int) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg int)
+ | S_RegV : forall Psi Gamma r,
+     Gamma (Id r) = Some (code Gamma) -> (forall R, Psi (Id (R (Id r))) = Some (code Gamma)) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg (code Gamma))
+ | S_RegT : forall Psi Gamma r,
+     Gamma (Id r) = Some True -> update Gamma (Id r) True = Gamma -> (forall R, Psi (Id (R (Id r))) = Some True ) -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True
  | S_Val : forall Psi Gamma a tau,
      ahas_type (PsiCtx Psi) a tau -> ahas_type (PsiGammaCtx Psi Gamma) a tau.
 
@@ -160,8 +160,8 @@ Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
      ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) -> ihas_type (PsiCtx Psi) (JMP v) (code Gamma)
  | S_JmpR :  forall Psi Gamma v,
      ahas_type (PsiGammaCtx Psi Gamma) (AReg v) ( reg (code Gamma)) -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma)
- | S_JmpT :  forall Psi Gamma v r,
-     Gamma (Id r) = Some True -> update Gamma (Id r) True = Gamma -> ahas_type (PsiGammaCtx Psi Gamma) (AReg v) True -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma) 
+ | S_JmpT :  forall Psi Gamma v,
+     ahas_type (PsiGammaCtx Psi Gamma) (AReg v) True -> ihas_type (PsiCtx Psi) (JMP R(v)) True
  | S_Mov : forall Psi Gamma R d a tau,
     ahas_type (PsiGammaCtx Psi Gamma) a tau -> ahas_type (PsiGammaCtx Psi Gamma) (AReg d) (reg tau) -> (update Gamma (Id d) (reg tau)) = Gamma -> ihas_type (PsiCtx Psi) (R(d) := aeval a R) (arrow Gamma Gamma)
  | S_Add : forall Psi Gamma d s,
@@ -264,7 +264,7 @@ Qed.
 
 (* typing rules for heap*)
 Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
-  | S_Heap : forall Psi H, (forall Gamma l, exists i, Psi (Id l) = Some (code Gamma) /\ H (Id l) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma)) -> Hhas_type EmptyCtx H Psi.
+  | S_Heap : forall Psi H, (forall l tau, exists i, Psi (Id l) = Some tau /\ H (Id l) = Some i /\ ihas_type (PsiCtx Psi) i tau) -> Hhas_type EmptyCtx H Psi.
 
 Hint Constructors Hhas_type.
 
@@ -278,8 +278,8 @@ Lemma Canonical_Values_Int : forall H Psi Gamma v tau, Hhas_type EmptyCtx H Psi 
 Proof.
   intros.
   subst.
-  inversion H1.
-  inversion H6.
+  inverts H1.
+  inverts H6.
   exists n.
   reflexivity.
 Qed.
@@ -294,12 +294,11 @@ Qed.
 Lemma Canonical_Values_label1 : forall H Psi Gamma v, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) ->  Psi (Id v) = Some (code Gamma) -> exists i, H (Id v) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
 Proof.
   intros.
-  inversion H0.
-  inversion H1.
-  inversion H11.
-  simpl in H16.
-  subst.
-  specialize H4 with (Gamma := Gamma) ( l := v).
+  inverts H0.
+  inverts H1.
+  inverts H7.
+  simpl in H5.
+  specialize H4 with ( l := v) (tau := code Gamma).
   destruct H4 as [i G].
   exists i.
   apply G.
@@ -308,24 +307,28 @@ Qed.
 Lemma Canonical_Values_label2 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg (code Gamma)) ->  Psi (Id (R (Id r))) = Some (code Gamma) -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
 Proof.
   intros.
-  inversion H0.
-  inversion H1.
-  specialize H4 with (Gamma := Gamma) ( l := R (Id r)).
+  inverts H0.
+  inverts H1.
+  specialize H4 with ( l := R (Id r)) (tau := code Gamma).
+  destruct H4 as [i G].
+  exists i.
+  apply G.
+  specialize H4 with ( l := R (Id r)) (tau := code Gamma).
   destruct H4 as [i G].
   exists i.
   apply G.
 Qed.
 
-Lemma Canonical_Values_label3 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True ->  Psi (Id (R (Id r))) = Some (code Gamma) -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
+Lemma Canonical_Values_label3 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True ->  Psi (Id (R (Id r))) = Some True -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i True.
 Proof.
   intros.
   inversion H0.
   inversion H1.
-  specialize H4 with (Gamma := Gamma) ( l := R (Id r)).
+  specialize H4 with ( l := R (Id r)) (tau := True).
   destruct H4 as [i G].
   exists i.
   apply G.
-  specialize H4 with (Gamma := Gamma) ( l := R (Id r)).
+  specialize H4 with ( l := R (Id r)) (tau := True).
   destruct H4 as [i G].
   exists i.
   apply G.
@@ -405,59 +408,6 @@ Proof.
   inversion H26.
   crush_assumptions.
   crush_assumptions.
-
-  Focus 4.
-  (*IJmp*)
-  inversion H4.
-  inversion H11.
-  inversion H16.
-  simpl in H21.
-  subst.
-
-  pose proof Canonical_Values_label1 H Psi Gamma v H2 H11 H20 as CVL1.
-  destruct CVL1 as [i G].
-
-  exists H.
-  exists R.
-  exists i.
-
-  split.
-  
-  apply R_IJmp_Succ with (a := ALab v).
-  simpl.
-  reflexivity.
-  apply G.
-
-  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
-  assumption.
-  assumption.
-
-  apply G.
-
-  (*IJmpR*)
-
-  inversion H11.
-  inversion H16.
-  inversion H13.
-  specialize (H18 R).
-  pose proof Canonical_Values_label3 H Psi Gamma R v H2 H13 H18 as CVL3.
-  destruct CVL3 as [i G].
-  
-  exists H.
-  exists R.
-  exists i.
-
-  split.
-  
-  apply R_IJmpR_Succ.
-  apply G.
-  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
-  assumption.
-  assumption.
-  apply G.
-
-  inversion H18. (*impossible case*)
-
   
   (* ISeq IIf I *)
   inversion H4.
@@ -499,7 +449,7 @@ Proof.
   assumption.
   assumption.
   assumption.
-
+  
   (*(I1_1;;I1_2);;I2*)
   inversion H4.
   inversion H12.
@@ -507,4 +457,56 @@ Proof.
   (*IJmp a;; I2*)
   inversion H4.
   inversion H12.
+
+  (*IJmp*)
+  inversion H4.
+  inversion H11.
+  inversion H16.
+  simpl in H21.
+  subst.
+
+  pose proof Canonical_Values_label1 H Psi Gamma v H2 H11 H20 as CVL1.
+  destruct CVL1 as [i G].
+
+  exists H.
+  exists R.
+  exists i.
+
+  split.
+  
+  apply R_IJmp_Succ with (a := ALab v).
+  simpl.
+  reflexivity.
+  apply G.
+
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
+  assumption.
+  assumption.
+
+  apply G.
+
+  (*IJmpR*)
+  inversion H11.
+  specialize H16 with (R := R).
+  subst.
+
+  pose proof Canonical_Values_label2 H Psi Gamma R v H2 H11 H16 as CVL2.
+  destruct CVL2 as [i G].
+
+  exists H.
+  exists R.
+  exists i.
+
+  split.
+  
+  apply R_IJmpR_Succ.
+  apply G.
+
+  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
+  assumption.
+  assumption.
+  apply G.
+
+  (*S_Val applied to S_JmpR, impossible case.*)
+  inversion H16.
 Qed.  
