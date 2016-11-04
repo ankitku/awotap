@@ -1,6 +1,16 @@
 (** * TAL-0 Typed Assembly Language *)
 
-(** Based on paper by Greg Morrisett , TAL-0 is the design of a RISC-style typed assembly language which focuses on control-flow safety. *)
+(** Based on paper by Greg Morrisett , TAL-0 is the design of a RISC-style typed assembly language which focuses on control-flow safety. This post provides a mechanized metatheory, particularly a machine checked proof of soundness of the TAL-0 type system as proposed by the author in section 4.2.10 of the book Advanced Topics in Types and Programming Languages.  *)
+
+(** The TAL-0 language runs on an abstract machine which is represented by 3 components :
+
+1. A heap H which is a finite, partial map from labels to heap values
+
+2. a register file R which is a total map from registers to values, and 
+
+3. a current instruction sequence I.  
+
+Diagram : *)
 
 Require Import Bool Arith Vector.
 Require Import LibTactics.
@@ -14,7 +24,7 @@ Inductive aexp : Type :=
  | AReg : nat -> aexp
  | ALab : nat -> aexp.
 
-
+(** We denote addresses of instructions stored in the heap as labels. Unlike a typical machine where labels are resolved to some machine address, which are integers, we maintain a distinction between labels and arbit integers, as this complies with our goal to state and prove the control-flow safety i.e. we can only branch to a valid label, and not to any arbit integer. This will ensure that the machine never gets stuck while trying to do some invalid operation. *)
 (*define relations for aeval , ieval*)
 Fixpoint aeval (a : aexp) (R : registers) : nat :=
   match a with
@@ -36,7 +46,7 @@ Inductive instr : Type :=
  | ISeq : instr -> instr -> instr
  | IJmp : aexp -> instr.
 
-
+(** Simple Notations are chosen for the sake of clarity while writing programs.*)
 Notation "'R(' d ')' ':=' a" :=
   (IMov d (ANum a)) (at level 60).
 Notation "'R(' d ')' '+:=' 'R(' s ')'" :=
@@ -68,7 +78,7 @@ Definition empty_heap : heaps := empty.
 Inductive st : Type :=
  | St : heaps -> registers -> instr -> st.
 
-
+(** Evaluation of instructions is supposed to change the Machine State and thus some of its components H, R or I. These changes are recorded as relations between initial and final state of the machine. *)
 Inductive ieval : st -> st -> Prop :=
  | R_IMov : forall H R I d a,
     ieval (St H R (R(d) := a ;; I)) (St H (t_update R (Id d) a) I)
@@ -90,7 +100,9 @@ Inductive ieval : st -> st -> Prop :=
      ieval st st' -> ieval st' st'' -> ieval st st''
  | R_IStuck : forall st, ieval st st.
 
+(** Example of a program fragment that multiplies 2 numbers stored in registers 1 and 2 and stores their product in register 3, before finally looping in its final state register 4. *)
 Definition init_heap := update (update (update empty_heap (Id 1) (R(3) := 0 ;; JMP 2)) (Id 2) (JIF R(1) 3 ;; R(2) +:= R(3) ;; R(1) -:= 1 ;; JMP 2) ) (Id 3) (JMP R(4)).
+
 
 Definition init_regs : registers :=  (t_update (t_update  (t_update (t_update (t_update empty_regs (Id 5) 1) (Id 6) 2) (Id 7) 3) (Id 1) 1) (Id 2) 2).
 Definition final_regs : registers := (t_update (t_update (t_update  (t_update (t_update (t_update empty_regs (Id 5) 1) (Id 6) 2) (Id 4) 1) (Id 1) 0) (Id 2) 2) (Id 3) 2).
@@ -115,7 +127,21 @@ Proof.
   reflexivity.
   rewrite <- beq_id_false_iff; trivial.
 Qed.
-     
+
+
+(** The types consist of
+1. int -> represents arbit integer stored in a register
+
+2. reg -> a type constructor. Takes as input, the type of the register, to which this register is pointing.
+
+3. code -> takes as input a typing context Gamma, and gives type (code Gamma) which is the type of an instruction sequence that expects type of the Register file to be Gamma before it begins execution 
+
+4. arrow -> represents type of a single instruction (excluding JMP), which expects register file of type Gamma1 before execution, and changes it to Gamma2 after it has executed.
+
+5. T -> It is the super type. It is used to represent the type of a register in R, which contains the label of the instruction currently executing. Because in such a case, we have the equation : Gamma (r) = code Gamma, which in the absence of subtyping or polymorphic types can't be solved. Hence T is assigned the type for such a register as it subsumes all types including itself. When we jump through a register of type T, we forget the type assigned to it, and reassign T to it.
+
+ *)
+
 Inductive ty : Type :=
  | int : ty
  | reg : ty -> ty
@@ -132,12 +158,14 @@ Definition empty_Gamma : context := empty.
 (* heap types *)
 Definition empty_Psi : context := empty.
 
+(** The Typing Rules *)
+(** Psi is a partial map containing types of instruction sequences. As all instruction sequences end in a JMP statement, all valid values in Psi are Some (code Gamma) where Gamma is the initial type state of register expected by that instruction sequence. Now, typing rules may require presence of either both Psi and Gamma, or only Psi or neither. Hence, we introduce a combined context structure, that handles all the 3 cases. *)
 Inductive cmbnd_ctx :=
  | EmptyCtx : cmbnd_ctx
  | PsiCtx : context -> cmbnd_ctx
  | PsiGammaCtx : context -> context -> cmbnd_ctx.
 
-(* typing rules for arithmetic expressions *)
+(** Typing rules for arithmetic expressions *)
 Inductive ahas_type : cmbnd_ctx -> aexp -> ty -> Prop :=
  | S_Int : forall Psi n,
      ahas_type (PsiCtx Psi) (ANum n) int
@@ -154,12 +182,10 @@ Inductive ahas_type : cmbnd_ctx -> aexp -> ty -> Prop :=
 
 Hint Constructors ahas_type.
 
-(* typing rules for instructions *)
+(** Typing rules for instructions *)
 Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
  | S_Jmp :  forall Psi Gamma v,
      ahas_type (PsiGammaCtx Psi Gamma) (ALab v) (code Gamma) -> ihas_type (PsiCtx Psi) (JMP v) (code Gamma)
- | S_JmpR :  forall Psi Gamma v,
-     ahas_type (PsiGammaCtx Psi Gamma) (AReg v) ( reg (code Gamma)) -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma)
  | S_JmpT :  forall Psi Gamma v,
      ahas_type (PsiGammaCtx Psi Gamma) (AReg v) True -> ihas_type (PsiCtx Psi) (JMP R(v)) (code Gamma)
  | S_Mov : forall Psi Gamma R d a tau,
@@ -176,7 +202,7 @@ Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
 Hint Constructors ihas_type.
 
 
-(* typing rules for register file *)
+(** Typing rules for register file *)
 Inductive Rhas_type : cmbnd_ctx -> registers -> context -> Prop :=
  | S_Regfile : forall Psi Gamma R r tau a, (Gamma (Id r)) = Some tau -> aeval a R = R (Id r) -> ahas_type (PsiGammaCtx Psi Gamma) a tau -> Rhas_type (PsiCtx Psi) R Gamma.
 
@@ -196,21 +222,10 @@ Ltac crush_map := match_map ; inequality; try reflexivity.
 
 
 
-Ltac crush_assumptions := repeat (try subst; try assumption).  
-
-Ltac crush :=
-  repeat match goal with
-           | [ H : ?T      |- ?T     ]  => assumption
-           | [ H : _ /\ _  |- _      ]  => destruct H
-           | [             |- _ /\ _  ]  => refine (conj _ _)
-           | [ H : _ = _   |- _  ]  => rewrite H
-           | [             |- _ -> _                ] => intro
-           | [ H : ihas_type _ _ _ |- _ ] => inverts H
-           | _                      => trivial
-         end.
+Ltac crush_assumptions := repeat (try subst; try assumption).
 
 
-Lemma heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> ihas_type (PsiCtx init_Psi) I (code init_Gamma).
+Example heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> ihas_type (PsiCtx init_Psi) I (code init_Gamma).
 Proof.
   intros.
   unfold init_heap in H.
@@ -261,18 +276,19 @@ Qed.
                    
 
 
-(* typing rules for heap*)
+(** Typing rule for Heap *)
 Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
   | S_Heap : forall Psi H, (forall l tau, exists i, Psi (Id l) = Some tau /\ H (Id l) = Some i /\ ihas_type (PsiCtx Psi) i tau) -> Hhas_type EmptyCtx H Psi.
 
 Hint Constructors Hhas_type.
 
-(* typing rules for Machine State *)
+(** Typing rule for a valid Machine State *)
 Inductive M_ok : cmbnd_ctx -> heaps -> registers -> instr -> Prop :=
  | S_Mach : forall H R I Psi Gamma, Hhas_type EmptyCtx H Psi -> Rhas_type (PsiCtx Psi) R Gamma -> ihas_type (PsiCtx Psi) I (code Gamma) -> M_ok EmptyCtx H R I.
 
 Hint Constructors M_ok.
 
+(** We will require some Canonical Values Lemmas in our proof of Soundness *)
 Lemma Canonical_Values_Int : forall H Psi Gamma v tau, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) v tau -> tau = int -> exists n, v = ANum n.
 Proof.
   intros.
@@ -282,6 +298,7 @@ Proof.
   exists n.
   reflexivity.
 Qed.
+
 
 Lemma Canonical_Values_Reg :forall H Psi Gamma r R, Hhas_type EmptyCtx H Psi -> Rhas_type (PsiCtx Psi) R Gamma -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg int) -> exists (n : nat), R (Id r) = n.
 Proof.
@@ -303,21 +320,6 @@ Proof.
   apply G.
 Qed.
 
-Lemma Canonical_Values_label2 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) (reg (code Gamma)) ->  Psi (Id (R (Id r))) = Some (code Gamma) -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
-Proof.
-  intros.
-  inverts H0.
-  inverts H1.
-  specialize H4 with ( l := R (Id r)) (tau := code Gamma).
-  destruct H4 as [i G].
-  exists i.
-  apply G.
-  specialize H4 with ( l := R (Id r)) (tau := code Gamma).
-  destruct H4 as [i G].
-  exists i.
-  apply G.
-Qed.
-
 Lemma Canonical_Values_label3 : forall H Psi Gamma R r, Hhas_type EmptyCtx H Psi -> ahas_type (PsiGammaCtx Psi Gamma) (AReg r) True ->  Psi (Id (R (Id r))) = Some True -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Psi) i (code Gamma).
 Proof.
   intros.
@@ -333,15 +335,16 @@ Proof.
   apply G.
  Qed.
 
+(** Finally the proof of Soundness *)
 Theorem Soundness : forall H R I, M_ok EmptyCtx H R I -> exists H' R' I', ieval (St H R I) (St H' R' I') /\ M_ok EmptyCtx H' R' I'.
 Proof.
   intros.
   inversion H0.
   induction I.
-  inversion H4.
-  inversion H4.
-  inversion H4.
-  inversion H4.
+  inversion H4...
+  inversion H4...
+  inversion H4...
+  inversion H4...
 
   induction I1.
 
@@ -369,7 +372,7 @@ Proof.
   crush_assumptions.
   trivial.
   crush_assumptions.
-  crush_assumptions.
+  crush_assumptions...
 
   
   (* ISeq IAdd I *)
@@ -393,7 +396,7 @@ Proof.
   trivial.
   trivial.
   crush_assumptions.
-  crush_assumptions.
+  crush_assumptions...
 
   (* ISeq ISub I *)
   inversion H4.
@@ -415,7 +418,7 @@ Proof.
   trivial.
   
   crush_assumptions.
-  crush_assumptions.
+  crush_assumptions...
   
   (* ISeq IIf I *)
   inversion H4.
@@ -456,15 +459,15 @@ Proof.
   apply S_Mach with (Psi := Psi) (Gamma := Gamma). 
   assumption.
   assumption.
-  assumption.
+  assumption...
   
   (*(I1_1;;I1_2);;I2*)
   inversion H4.
-  inversion H12.
+  inversion H12...
 
   (*IJmp a;; I2*)
   inversion H4.
-  inversion H12.
+  inversion H12...
 
   (*IJmp*)
   inversion H4.
@@ -491,34 +494,9 @@ Proof.
   assumption.
   assumption.
 
-  apply G.
+  apply G...
 
-  (*IJmpR*)
-  inversion H11.
-
-  inversion H3.
-  specialize (H13 R).
-  subst.
-
-  pose proof Canonical_Values_label2 H Psi Gamma R v H2 H11 H13 as CVL2.
-  destruct CVL2 as [i G].
-
-  exists H.
-  exists R.
-  exists i.
-
-  split.
   
-  apply R_IJmpR_Succ.
-  apply G.
-
-  apply S_Mach with (Psi := Psi) (Gamma := Gamma).
-  assumption.
-  assumption.
-  apply G.
-
-  (*S_Val applied to S_JmpR, impossible case.*)
-  inversion H16.
 
   (*IJmpT*)
   inversion H11.
@@ -542,5 +520,5 @@ Proof.
   apply G.
 
   (*S_Val applied to S_JmpT, impossible case.*)
-  inversion H16.
+  inversion H16...
 Qed.  
