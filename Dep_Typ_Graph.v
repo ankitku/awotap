@@ -82,4 +82,4 @@ Fixpoint edgeListToAdjMap (el : edge_list) (m : total_map edge_list) : total_map
   | co hd tl => edgeListToAdjMap tl (t_update m (fromNode hd) tl)
   end. 
 
-End phoas_graph.
+end phoas_graph

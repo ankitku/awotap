@@ -122,10 +122,10 @@ Lemma t_update_eq : forall A (m: total_map A) x v,
 Proof.
   intros.
   unfold t_update.
-  destruct x.
   rewrite beq_id_refl.
   reflexivity.
 Qed.
+
 (** **** Exercise: 2 stars, optional (t_update_neq)  *)
 (** On the other hand, if we update a map [m] at a key [x1] and then
     look up a _different_ key [x2] in the resulting map, we get the
