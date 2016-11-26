@@ -41,8 +41,7 @@ Eval compute in ((edge_compose (edge_compose f g) h) (Id 5)).
 
 Section phoas_graph.
 (** a universal constructor for nodes *)
-Inductive u (i : id) : Type :=
-  | U : u i.
+Inductive u (i : id) : Type := U.
 
 Definition v1 := U (Id 5).
 Check v1.
@@ -82,4 +81,4 @@ Fixpoint edgeListToAdjMap (el : edge_list) (m : total_map edge_list) : total_map
   | co hd tl => edgeListToAdjMap tl (t_update m (fromNode hd) tl)
   end. 
 
-end phoas_graph
+End phoas_graph.
