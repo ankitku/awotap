@@ -95,8 +95,7 @@ Inductive ieval : st -> st -> Prop :=
  | R_IIf_NEQ : forall H R I r v,
      aeval (AReg r) R <> 0 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I)   
  | R_ISeq : forall st st' st'',
-     ieval st st' -> ieval st' st'' -> ieval st st''
- | R_IStuck : forall st, ieval st st.
+     ieval st st' -> ieval st' st'' -> ieval st st''.
 
 (** Example of a program fragment that multiplies 2 numbers stored in registers 1 and 2 and stores their product in register 3, before finally looping in its final state register 4. *)
 Definition init_heap := update (update (update empty_heap (Id 1) (R(3) := 0 ;; JMP 2)) (Id 2) (JIF R(1) 3 ;; R(2) +:= R(3) ;; R(1) -:= 1 ;; JMP 2) ) (Id 3) (JMP R(4)).
