@@ -17,14 +17,14 @@ Require Import Maps.
 Definition registers := total_map nat.
 Definition empty_regs : registers := t_empty 0.
       
-Inductive aexp : Type :=
- | ANum : nat -> aexp
- | AReg : nat -> aexp
- | ALab : nat -> aexp.
+Inductive val : Type :=
+ | ANum : nat -> val
+ | AReg : nat -> val
+ | ALab : nat -> val.
 
 (** We denote addresses of instructions stored in the heap as labels. Unlike a typical machine where labels are resolved to some machine address, which are integers, we maintain a distinction between labels and arbit integers, as this complies with our goal to state and prove the control-flow safety i.e. we can only branch to a valid label, and not to any arbit integer. This will ensure that the machine never gets stuck while trying to do some invalid operation. *)
 (*define relations for aeval , ieval*)
-Fixpoint aeval (a : aexp) (R : registers) : nat :=
+Fixpoint aeval (a : val) (R : registers) : nat :=
   match a with
  | ANum n => n
  | AReg d => R (Id d)
@@ -34,15 +34,15 @@ Fixpoint aeval (a : aexp) (R : registers) : nat :=
 
 Inductive instr : Type :=
  | IMov : forall d : nat,
-    aexp -> instr
+    val -> instr
  | IAdd : forall d s : nat,
     instr
  | ISub : forall d v : nat,
     instr
  | IIf : forall d : nat,
-    aexp -> instr
+    val -> instr
  | ISeq : instr -> instr -> instr
- | IJmp : aexp -> instr.
+ | IJmp : val -> instr.  
 
 (** Simple Notations are chosen for the sake of clarity while writing programs.*)
 Notation "'R(' d ')' ':=' a" :=
@@ -161,7 +161,7 @@ Inductive cmbnd_ctx :=
  | PsiGammaCtx : context -> context -> cmbnd_ctx.
 
 (** Typing rules for arithmetic expressions *)
-Inductive ahas_type : cmbnd_ctx -> aexp -> ty -> Prop :=
+Inductive ahas_type : cmbnd_ctx -> val -> ty -> Prop :=
  | S_Int : forall Ψ n,
      ahas_type (PsiCtx Ψ) (ANum n) int
  | S_Lab : forall Ψ Γ l v R,
@@ -344,7 +344,7 @@ Proof.
 
   symmetry in H18.
   rewrite H18 in H13.
-  exists H (t_update R (Id d) (aeval a0 R1)) I2.
+  exists H (t_update R (Id d) (aeval a R1)) I2.
   split.
   crush.
   apply S_Mach with (Ψ := Ψ) (Γ := Γ).
@@ -409,7 +409,7 @@ Proof.
   subst.
   simpl in H14.
   remember (R (Id d)) as rd; destruct rd.
-  pose proof Canonical_Values_label1 H Ψ Γ v H2 H20 H14 as CVL1.
+  pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H20 H14 as CVL1.
   destruct CVL1 as [I' G].
   exists H R I'.
   split.
@@ -444,13 +444,13 @@ Proof.
   simpl in H21.
   subst.
 
-  pose proof Canonical_Values_label1 H Ψ Γ v H2 H11 H20 as CVL1.
+  pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H11 H20 as CVL1.
   destruct CVL1 as [i G].
 
   exists H R i.
 
   split.
-  apply R_IJmp_Succ with (a := ALab v).
+  apply R_IJmp_Succ with (a := ALab v0).
   simpl.
   crush.
   crush.
@@ -465,7 +465,7 @@ Proof.
   inversion H11.
   inversion H3.
 
-  pose proof Canonical_Values_label2 H Ψ Γ R v H2 H11 as CVL3.
+  pose proof Canonical_Values_label2 H Ψ Γ R v0 H2 H11 as CVL3.
   destruct CVL3 as [i G].
 
   exists H R i.
