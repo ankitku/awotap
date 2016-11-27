@@ -40,9 +40,11 @@ Inductive instr : Type :=
  | ISub : forall d v : nat,
     instr
  | IIf : forall d : nat,
-    val -> instr
- | ISeq : instr -> instr -> instr
- | IJmp : val -> instr.  
+    val -> instr.
+
+Inductive instr_seq : Type :=
+ | ISeq : instr -> instr_seq -> instr_seq
+ | IJmp : val -> instr_seq.
 
 (** Simple Notations are chosen for the sake of clarity while writing programs.*)
 Notation "'R(' d ')' ':=' a" :=
@@ -64,17 +66,17 @@ Check JIF R(1) 2.
 Check R(1) := 10.
 Check R(2) +:= R(1).
 Check R(2) -:= 1.
-Check R(2) +:= R(1) ;; R(2) -:= 1.
+Check R(2) +:= R(1) ;; R(2) -:= 1 ;; JMP 2.
 Check JMP 2.
 Check JMP R(2).
 
       
-Definition heaps := partial_map instr.
+Definition heaps := partial_map instr_seq.
 Definition empty_heap : heaps := empty.
 
 (* Machine State *)
 Inductive st : Type :=
- | St : heaps -> registers -> instr -> st.
+ | St : heaps -> registers -> instr_seq -> st.
 
 (** Evaluation of instructions is supposed to change the Machine State and thus some of its components H, R or I. These changes are posed as relations between initial and final state of the machine. *)
 Inductive ieval : st -> st -> Prop :=
@@ -179,10 +181,6 @@ Hint Constructors ahas_type.
 
 (** Typing rules for instructions *)
 Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
- | S_Jmp :  forall Ψ Γ v,
-     ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> ihas_type (PsiCtx Ψ) (JMP v) (code Γ)
- | S_JmpT :  forall Ψ Γ v,
-     ahas_type (PsiGammaCtx Ψ Γ) (AReg v) True -> ihas_type (PsiCtx Ψ) (JMP R(v)) (code Γ)
  | S_Mov : forall Ψ Γ R d a tau,
     ahas_type (PsiGammaCtx Ψ Γ) a tau -> ahas_type (PsiGammaCtx Ψ Γ) (AReg d) (reg tau) -> (update Γ (Id d) (reg tau)) = Γ -> ihas_type (PsiCtx Ψ) (R(d) := aeval a R) (arrow Γ Γ)
  | S_Add : forall Ψ Γ d s,
@@ -190,10 +188,19 @@ Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
  | S_Sub : forall Ψ Γ s a v,
       ahas_type (PsiGammaCtx Ψ Γ) a int -> ahas_type (PsiGammaCtx Ψ Γ) (AReg s) (reg int) -> a = ANum v -> ihas_type (PsiCtx Ψ) (R(s) -:= v) (arrow Γ Γ)
  | S_If :  forall Ψ Γ r v,
-     ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> ihas_type (PsiCtx Ψ) (JIF R(r) v) (arrow Γ Γ)
- | S_Seq :  forall Ψ i1 i2 Γ Γ2,
-     ihas_type (PsiCtx Ψ) i1 (arrow Γ Γ2) -> ihas_type (PsiCtx Ψ) i2 (code Γ2) -> ihas_type (PsiCtx Ψ) (ISeq i1 i2) (code Γ).
+     ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> ihas_type (PsiCtx Ψ) (JIF R(r) v) (arrow Γ Γ).
 Hint Constructors ihas_type.
+
+
+Inductive iseq_has_type : cmbnd_ctx -> instr_seq -> ty -> Prop :=
+ | S_Jmp :  forall Ψ Γ v,
+     ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> iseq_has_type (PsiCtx Ψ) (JMP v) (code Γ)
+ | S_JmpT :  forall Ψ Γ v,
+     ahas_type (PsiGammaCtx Ψ Γ) (AReg v) True -> iseq_has_type (PsiCtx Ψ) (JMP R(v)) (code Γ)
+ | S_Seq :  forall Ψ i1 i2 Γ Γ2,
+     ihas_type (PsiCtx Ψ) i1 (arrow Γ Γ2) -> iseq_has_type (PsiCtx Ψ) i2 (code Γ2) -> iseq_has_type (PsiCtx Ψ) (ISeq i1 i2) (code Γ).                                           Hint Constructors iseq_has_type.
+
+
 
 Definition init_Gamma : context := update (update (update (update empty_Gamma (Id 1) (reg int)) (Id 2) (reg int)) (Id 3) (reg int)) (Id 4) True.
 Check init_Gamma.
@@ -226,7 +233,7 @@ Ltac crush :=
     
 
 
-Example heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> ihas_type (PsiCtx init_Psi) I (code init_Gamma).
+Example heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> iseq_has_type (PsiCtx init_Psi) I (code init_Gamma).
 Proof.
   intros.
   unfold init_heap in H.
@@ -270,13 +277,13 @@ Hint Constructors Rhas_type.
 
 (** Typing rule for Heap *)
 Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
-  | S_Heap : forall Ψ H, (forall l tau, exists i, Ψ (Id l) = Some tau /\ H (Id l) = Some i /\ ihas_type (PsiCtx Ψ) i tau) -> Hhas_type EmptyCtx H Ψ.
+  | S_Heap : forall Ψ H, (forall l tau, exists is, Ψ (Id l) = Some tau /\ H (Id l) = Some is /\ iseq_has_type (PsiCtx Ψ) is tau) -> Hhas_type EmptyCtx H Ψ.
 
 Hint Constructors Hhas_type.
 
 (** Typing rule for a valid Machine State *)
-Inductive M_ok : cmbnd_ctx -> heaps -> registers -> instr -> Prop :=
- | S_Mach : forall H R I Ψ Γ, Hhas_type EmptyCtx H Ψ -> Rhas_type (PsiCtx Ψ) R Γ -> ihas_type (PsiCtx Ψ) I (code Γ) -> M_ok EmptyCtx H R I.
+Inductive M_ok : cmbnd_ctx -> heaps -> registers -> instr_seq -> Prop :=
+ | S_Mach : forall H R Is Ψ Γ, Hhas_type EmptyCtx H Ψ -> Rhas_type (PsiCtx Ψ) R Γ -> iseq_has_type (PsiCtx Ψ) Is (code Γ) -> M_ok EmptyCtx H R Is.
 
 Hint Constructors M_ok.
 
@@ -299,7 +306,7 @@ Proof.
   crush.
 Qed.
 
-Lemma Canonical_Values_label1 : forall H Ψ Γ v, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) ->  Ψ (Id v) = Some (code Γ) -> exists i, H (Id v) = Some i /\ ihas_type (PsiCtx Ψ) i (code Γ).
+Lemma Canonical_Values_label1 : forall H Ψ Γ v, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) ->  Ψ (Id v) = Some (code Γ) -> exists is, H (Id v) = Some is /\ iseq_has_type (PsiCtx Ψ) is (code Γ).
 Proof.
   intros.
   inversion H0.
@@ -312,7 +319,7 @@ Proof.
   apply G.
 Qed.
 
-Lemma Canonical_Values_label2 : forall H Ψ Γ R r, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) True -> exists i, H (Id (R (Id r))) = Some i /\ ihas_type (PsiCtx Ψ) i (code Γ).
+Lemma Canonical_Values_label2 : forall H Ψ Γ R r, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) True -> exists is, H (Id (R (Id r))) = Some is /\ iseq_has_type (PsiCtx Ψ) is (code Γ).
 Proof.
   intros.
   inversion H0.
@@ -328,90 +335,89 @@ Proof.
  Qed.
 
 (** Finally the proof of Soundness *)
-Theorem Soundness : forall H R I, M_ok EmptyCtx H R I -> exists H' R' I', ieval (St H R I) (St H' R' I') /\ M_ok EmptyCtx H' R' I'.
+Theorem Soundness : forall H R Is, M_ok EmptyCtx H R Is -> exists H' R' Is', ieval (St H R Is) (St H' R' Is') /\ M_ok EmptyCtx H' R' Is'.
 Proof.
   intros.
   inversion H0.
-  induction I.
-  inverts H4...
-  inverts H4...
-  inverts H4...
-  inverts H4...
-
-  induction I1; inversion H4; try inversion H12.
+  induction Is.
+  
+  inverts H4.
+  induction i; inversion H12. 
 
   (* ISeq IMov I *)
 
-  symmetry in H18.
-  rewrite H18 in H13.
-  exists H (t_update R (Id d) (aeval a R1)) I2.
+  symmetry in H11.
+  rewrite H11 in H16.
+  exists H (t_update R (Id d) (aeval a R1)) Is.
   split.
   crush.
   apply S_Mach with (Ψ := Ψ) (Γ := Γ).
   crush.
   apply S_Regfile with (r := d) (tau := reg tau) (a := AReg d).
   
-  rewrite H18 in H21.
-  rewrite <- H21.
+  rewrite <- H16.
 
   rewrite update_eq.
   crush.
   crush.
+  rewrite H11 in H15.
   crush.
-  crush...
-
+  rewrite H11 in H13.
+  crush.
   
   (* ISeq IAdd I *)
 
-  symmetry in H18.
-  rewrite H18 in H13.
-  exists H (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)) I2.
+  symmetry in H11.
+  rewrite H11 in H13.
+  exists H (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)) Is.
   split.
   crush.
   apply S_Mach with (Ψ := Ψ) (Γ := Γ).
   crush.
   apply S_Regfile with (a := AReg d) (r := d) (tau := reg int).
   subst.
-  rewrite <- H21.
+  rewrite <- H16.
   apply update_eq.
-  crush_assumptions.
-  inversion H20.
+  crush.
+  rewrite H11 in H15.
   crush.
   crush.
-  crush.
-  crush...
-
+  
   (* ISeq ISub I *)
 
-  symmetry in H18.
-  rewrite H18 in H13.
-  exists H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) I2.
+  symmetry in H11.
+  rewrite H11 in H13.
+  exists H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) Is.
   split.
   crush.
   apply S_Mach with (Ψ := Ψ) (Γ := Γ).
   crush.
   apply S_Regfile with (a := AReg d) (r := d) (tau := reg int).
-  inversion H20.
-  rewrite H18 in H23.
+  inversion H15.
+  subst.
   crush.
-  inversion H26.
   crush.
-  
+  inversion H15.
   crush.
-  crush...
+  inversion H7.
+  trivial.
+  crush.
+  crush.
   
   (* ISeq IIf I *)
-  symmetry in H19.
-  rewrite H19 in H13.
+  symmetry in H14.
+  rewrite H14 in H13.
   subst.
-  inversion H20.
-  inversion H8.
+  inversion H12.
+  inversion H9.
+  inversion H18.
   subst.
-  simpl in H14.
+  simpl in H22.
+  
   remember (R (Id d)) as rd; destruct rd.
-  pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H20 H14 as CVL1.
-  destruct CVL1 as [I' G].
-  exists H R I'.
+  pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H9 H22 as CVL1.
+  destruct CVL1 as [Is' G].
+  exists H R Is'.
   split.
   apply R_IIf_EQ.
   simpl.
@@ -424,7 +430,7 @@ Proof.
   crush.
   apply G.
 
-  exists H R I2.
+  exists H R Is.
   
   split.
   apply R_IIf_NEQ.
@@ -443,11 +449,10 @@ Proof.
   inversion H16.
   simpl in H21.
   subst.
-
   pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H11 H20 as CVL1.
-  destruct CVL1 as [i G].
+  destruct CVL1 as [Is G].
 
-  exists H R i.
+  exists H R Is.
 
   split.
   apply R_IJmp_Succ with (a := ALab v0).
@@ -466,9 +471,9 @@ Proof.
   inversion H3.
 
   pose proof Canonical_Values_label2 H Ψ Γ R v0 H2 H11 as CVL3.
-  destruct CVL3 as [i G].
+  destruct CVL3 as [Is G].
 
-  exists H R i.
+  exists H R Is.
 
   split.
   crush.
