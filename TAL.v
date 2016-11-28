@@ -214,22 +214,33 @@ Ltac match_map := repeat (try rewrite update_neq; try rewrite update_eq; try ref
 Ltac inequality := (rewrite <- beq_id_false_iff; trivial).
 Ltac crush_map := match_map ; inequality; try reflexivity.
 
+Ltac rewrite_hyp :=
+     match goal with
+       | [ H : ?n = _ |- context[?n] ] => rewrite H
+     end.
 
-
-Ltac crush_assumptions := repeat (try subst; try assumption).
+Ltac crush_generic :=
+  repeat match goal with
+         | [ H : ?T |- ?T    ] => exact T
+         | [ |- ?T = ?T ] => reflexivity
+         | [ |- True         ] => constructor
+         | [ |- _ /\ _       ] => constructor
+         | [ |- _ /\ _ -> _  ] => intro
+         | [ H : _ /\ _ |- _ ] => destruct H
+         | [ |- nat -> _     ] => intro
+         | _ => rewrite_hyp || eauto || jauto
+         end.
 
 Ltac crush :=
-  repeat match goal with
-         | [ H : ?T |- ?T ]     => crush_assumptions
-         | [ |- ?T = ?T ] => reflexivity
-         | [ |- update _ _ _ _ = _ ] => crush_map
-         | [ |- init_Gamma _ = _ ] => unfold init_Gamma
-         | [ |- init_Psi _ = _ ] => unfold init_Psi
-         | [ |- ieval _ _ ] => constructor; auto
-         | [ |- ihas_type _ _ _] => constructor; auto
-         | [ |- ?T -> False  ]  => assert T
-         | _ => try subst; trivial
-         end.
+  repeat (crush_generic; match goal with
+                         | [ |- update _ _ _ _ = _ ] => crush_map
+                         | [ |- init_Gamma _ = _ ] => unfold init_Gamma
+                         | [ |- init_Psi _ = _ ] => unfold init_Psi
+                         | [ |- ieval _ _ ] => constructor; auto
+                         | [ |- ihas_type _ _ _] => constructor; auto
+                         | [ |- ?T -> False  ]  => assert T
+                         | _ => try subst; trivial
+                         end).
     
 
 
@@ -271,24 +282,28 @@ Qed.
                    
 (** Typing rule for register file *)
 Inductive Rhas_type : cmbnd_ctx -> registers -> context -> Prop :=
- | S_Regfile : forall Ψ Γ R r tau a, (Γ (Id r)) = Some tau -> aeval a R = R (Id r) -> ahas_type (PsiGammaCtx Ψ Γ) a tau -> Rhas_type (PsiCtx Ψ) R Γ.
+| S_Regfile : forall Ψ Γ R r tau a,
+    (Γ (Id r)) = Some tau -> aeval a R = R (Id r) -> ahas_type (PsiGammaCtx Ψ Γ) a tau -> Rhas_type (PsiCtx Ψ) R Γ.
 
 Hint Constructors Rhas_type.
 
 (** Typing rule for Heap *)
 Inductive Hhas_type : cmbnd_ctx -> heaps -> context -> Prop :=
-  | S_Heap : forall Ψ H, (forall l tau, exists is, Ψ (Id l) = Some tau /\ H (Id l) = Some is /\ iseq_has_type (PsiCtx Ψ) is tau) -> Hhas_type EmptyCtx H Ψ.
+| S_Heap : forall Ψ H,
+    (forall l tau, exists is, Ψ (Id l) = Some tau /\ H (Id l) = Some is /\ iseq_has_type (PsiCtx Ψ) is tau) -> Hhas_type EmptyCtx H Ψ.
 
 Hint Constructors Hhas_type.
 
 (** Typing rule for a valid Machine State *)
 Inductive M_ok : cmbnd_ctx -> heaps -> registers -> instr_seq -> Prop :=
- | S_Mach : forall H R Is Ψ Γ, Hhas_type EmptyCtx H Ψ -> Rhas_type (PsiCtx Ψ) R Γ -> iseq_has_type (PsiCtx Ψ) Is (code Γ) -> M_ok EmptyCtx H R Is.
+| S_Mach : forall H R Is Ψ Γ,
+    Hhas_type EmptyCtx H Ψ -> Rhas_type (PsiCtx Ψ) R Γ -> iseq_has_type (PsiCtx Ψ) Is (code Γ) -> M_ok EmptyCtx H R Is.
 
 Hint Constructors M_ok.
 
 (** We will require some Canonical Values Lemmas in our proof of Soundness *)
-Lemma Canonical_Values_Int : forall H Ψ Γ v tau, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) v tau -> tau = int -> exists n, v = ANum n.
+Lemma Canonical_Values_Int : forall H Ψ Γ v tau,
+    Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) v tau -> tau = int -> exists n, v = ANum n.
 Proof.
   intros.
   subst.
@@ -299,14 +314,16 @@ Proof.
 Qed.
 
 
-Lemma Canonical_Values_Reg :forall H Ψ Γ r R, Hhas_type EmptyCtx H Ψ -> Rhas_type (PsiCtx Ψ) R Γ -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int) -> exists (n : nat), R (Id r) = n.
+Lemma Canonical_Values_Reg :forall H Ψ Γ r R,
+    Hhas_type EmptyCtx H Ψ -> Rhas_type (PsiCtx Ψ) R Γ -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int) -> exists (n : nat), R (Id r) = n.
 Proof.
   intros.
   exists (R (Id r)).
   crush.
 Qed.
 
-Lemma Canonical_Values_label1 : forall H Ψ Γ v, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) ->  Ψ (Id v) = Some (code Γ) -> exists is, H (Id v) = Some is /\ iseq_has_type (PsiCtx Ψ) is (code Γ).
+Lemma Canonical_Values_label1 : forall H Ψ Γ v,
+    Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) ->  Ψ (Id v) = Some (code Γ) -> exists is, H (Id v) = Some is /\ iseq_has_type (PsiCtx Ψ) is (code Γ).
 Proof.
   intros.
   inversion H0.
@@ -316,10 +333,11 @@ Proof.
   specialize H4 with ( l := v) (tau := code Γ).
   destruct H4 as [i G].
   exists i.
-  apply G.
+  crush.
 Qed.
 
-Lemma Canonical_Values_label2 : forall H Ψ Γ R r, Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) True -> exists is, H (Id (R (Id r))) = Some is /\ iseq_has_type (PsiCtx Ψ) is (code Γ).
+Lemma Canonical_Values_label2 : forall H Ψ Γ R r,
+    Hhas_type EmptyCtx H Ψ -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) True -> exists is, H (Id (R (Id r))) = Some is /\ iseq_has_type (PsiCtx Ψ) is (code Γ).
 Proof.
   intros.
   inversion H0.
@@ -331,62 +349,48 @@ Proof.
   specialize H3 with ( l := R (Id r)) (tau := (code Γ)).
   destruct H3 as [i G].
   exists i.
-  apply G.
+  crush.
  Qed.
 
 (** Finally the proof of Soundness *)
-Theorem Soundness : forall H R Is, M_ok EmptyCtx H R Is -> exists H' R' Is', ieval (St H R Is) (St H' R' Is') /\ M_ok EmptyCtx H' R' Is'.
+Theorem Soundness : forall H R Is,
+    M_ok EmptyCtx H R Is -> exists H' R' Is', ieval (St H R Is) (St H' R' Is') /\ M_ok EmptyCtx H' R' Is'.
 Proof.
   intros.
-  inversion H0.
-  induction Is.
+  inversion H0 ; induction Is; inverts H4.
+  induction i; inversion H12;
+   try match goal with
+    | [H : Γ = Γ2 |- _ ] => symmetry in H
+    end;
+    try subst.
   
-  inverts H4.
-  induction i; inversion H12. 
 
   (* ISeq IMov I *)
-
-  symmetry in H11.
-  rewrite H11 in H16.
   exists H (t_update R (Id d) (aeval a R1)) Is.
-  split.
   crush.
   apply S_Mach with (Ψ := Ψ) (Γ := Γ).
   crush.
   apply S_Regfile with (r := d) (tau := reg tau) (a := AReg d).
-  
   rewrite <- H16.
-
   rewrite update_eq.
   crush.
   crush.
-  rewrite H11 in H15.
   crush.
-  rewrite H11 in H13.
   crush.
   
   (* ISeq IAdd I *)
-
-  symmetry in H11.
-  rewrite H11 in H13.
   exists H (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)) Is.
   split.
   crush.
   apply S_Mach with (Ψ := Ψ) (Γ := Γ).
   crush.
   apply S_Regfile with (a := AReg d) (r := d) (tau := reg int).
-  subst.
-  rewrite <- H16.
-  apply update_eq.
+  rewrite <- H16; apply update_eq.
   crush.
-  rewrite H11 in H15.
   crush.
   crush.
   
   (* ISeq ISub I *)
-
-  symmetry in H11.
-  rewrite H11 in H13.
   exists H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) Is.
   split.
   crush.
@@ -394,7 +398,6 @@ Proof.
   crush.
   apply S_Regfile with (a := AReg d) (r := d) (tau := reg int).
   inversion H15.
-  subst.
   crush.
   crush.
   inversion H15.
@@ -405,9 +408,6 @@ Proof.
   crush.
   
   (* ISeq IIf I *)
-  symmetry in H14.
-  rewrite H14 in H13.
-  subst.
   inversion H12.
   inversion H9.
   inversion H18.
@@ -418,17 +418,7 @@ Proof.
   pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H9 H22 as CVL1.
   destruct CVL1 as [Is' G].
   exists H R Is'.
-  split.
-  apply R_IIf_EQ.
-  simpl.
-  symmetry in Heqrd.
   crush.
-  apply G.
-  
-  apply S_Mach with (Ψ := Ψ) (Γ := Γ). 
-  crush.
-  crush.
-  apply G.
 
   exists H R Is.
   
@@ -438,52 +428,25 @@ Proof.
   symmetry in Heqrd; rewrite Heqrd.
   apply beq_nat_false_iff.
   trivial.
-  apply S_Mach with (Ψ := Ψ) (Γ := Γ). 
   crush.
-  crush.
-  crush...
   
   (*IJmp*)
-  inversion H4.
-  inversion H11.
-  inversion H16.
-  simpl in H21.
+  inversion H11; inversion H12.
+  simpl in H17.
   subst.
-  pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H11 H20 as CVL1.
+  pose proof Canonical_Values_label1 H Ψ Γ v0 H2 H11 H16 as CVL1.
   destruct CVL1 as [Is G].
 
   exists H R Is.
-
-  split.
+  crush.
   apply R_IJmp_Succ with (a := ALab v0).
-  simpl.
   crush.
   crush.
-  apply G.
-
-  apply S_Mach with (Ψ := Ψ) (Γ := Γ).
-  crush.
-  crush.
-  apply G...
   
   (*IJmpT*)
-  inversion H11.
-  inversion H3.
-
   pose proof Canonical_Values_label2 H Ψ Γ R v0 H2 H11 as CVL3.
   destruct CVL3 as [Is G].
 
   exists H R Is.
-
-  split.
   crush.
-  apply G.
-
-  apply S_Mach with (Ψ := Ψ) (Γ := Γ).
-  crush.
-  crush.
-  apply G.
-
-  (*S_Val applied to S_JmpT, impossible case.*)
-  inversion H16...
-Qed.  
+Qed.
