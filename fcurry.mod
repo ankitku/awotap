@@ -23,3 +23,4 @@ step (app (abs R) N) (R N).
 
 steps M M.
 steps M N :- step M M', steps M' N.
+
