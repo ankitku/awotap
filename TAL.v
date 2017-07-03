@@ -9,42 +9,42 @@
 2. a register file R which is a total map from registers to values, and 
 
 3. a current instruction sequence I.  
-*)
+ *)
 
 Require Import Bool Arith Vector LibTactics.
 Require Import Maps.
 
 Definition registers := total_map nat.
 Definition empty_regs : registers := t_empty 0.
-      
+
 Inductive val : Type :=
- | ANum : nat -> val
- | AReg : nat -> val
- | ALab : nat -> val.
+| ANum : nat -> val
+| AReg : nat -> val
+| ALab : nat -> val.
 
 (** We denote addresses of instructions stored in the heap as labels. Unlike a typical machine where labels are resolved to some machine address, which are integers, we maintain a distinction between labels and arbit integers, as this complies with our goal to state and prove the control-flow safety i.e. we can only branch to a valid label, and not to any arbit integer. This will ensure that the machine never gets stuck while trying to do some invalid operation. *)
 (*define relations for aeval , ieval*)
 Fixpoint aeval (a : val) (R : registers) : nat :=
   match a with
- | ANum n => n
- | AReg d => R (Id d)
- | ALab l => l
+  | ANum n => n
+  | AReg d => R (Id d)
+  | ALab l => l
   end.
 
 
 Inductive instr : Type :=
- | IMov : forall d : nat,
+| IMov : forall d : nat,
     val -> instr
- | IAdd : forall d s : nat,
+| IAdd : forall d s : nat,
     instr
- | ISub : forall d v : nat,
+| ISub : forall d v : nat,
     instr
- | IIf : forall d : nat,
+| IIf : forall d : nat,
     val -> instr.
 
 Inductive instr_seq : Type :=
- | ISeq : instr -> instr_seq -> instr_seq
- | IJmp : val -> instr_seq.
+| ISeq : instr -> instr_seq -> instr_seq
+| IJmp : val -> instr_seq.
 
 (** Simple Notations are chosen for the sake of clarity while writing programs.*)
 Notation "'R(' d ')' ':=' a" :=
@@ -70,34 +70,34 @@ Check R(2) +:= R(1) ;; R(2) -:= 1 ;; JMP 2.
 Check JMP 2.
 Check JMP R(2).
 
-      
+
 Definition heaps := partial_map instr_seq.
 Definition empty_heap : heaps := empty.
 
 (* Machine State *)
 Inductive st : Type :=
- | St : heaps -> registers -> instr_seq -> st.
+| St : heaps -> registers -> instr_seq -> st.
 
 (** Evaluation of instructions is supposed to change the Machine State and thus some of its components H, R or I. These changes are posed as relations between initial and final state of the machine. *)
 Inductive ieval : st -> st -> Prop :=
- | R_IMov : forall H R I d a,
+| R_IMov : forall H R I d a,
     ieval (St H R (R(d) := a ;; I)) (St H (t_update R (Id d) a) I)
- | R_IAdd : forall H R I d s,
-     ieval (St H R (R(d) +:= R(s) ;; I)) (St H (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)) I)
- | R_ISub : forall H R I d v,
-     ieval (St H R (R(d) -:= v ;; I)) (St H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) I)
- | R_IJmp_Succ : forall H R I' a l,
-     l = (aeval a R) -> H (Id l) = Some I' -> ieval (St H R (JMP l)) (St H R I')
- | R_IJmpR_Succ : forall H R I' r,
-     H (Id (R (Id r))) = Some I' -> ieval (St H R (JMP R(r))) (St H R I')
- | R_IJmp_Fail : forall H R I a,
-     H (Id (aeval a R)) = None -> ieval (St H R I) (St H R I)
- | R_IIf_EQ : forall H R I I2 r v,
-     aeval (AReg r) R = 0 -> (H (Id v)) = Some I2 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I2)
- | R_IIf_NEQ : forall H R I r v,
-     aeval (AReg r) R <> 0 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I)   
- | R_ISeq : forall st st' st'',
-     ieval st st' -> ieval st' st'' -> ieval st st''.
+| R_IAdd : forall H R I d s,
+    ieval (St H R (R(d) +:= R(s) ;; I)) (St H (t_update R (Id d) (aeval (AReg d) R + aeval (AReg s) R)) I)
+| R_ISub : forall H R I d v,
+    ieval (St H R (R(d) -:= v ;; I)) (St H (t_update R (Id d) (aeval (AReg d) R - aeval (ANum v) R)) I)
+| R_IJmp_Succ : forall H R I' a l,
+    l = (aeval a R) -> H (Id l) = Some I' -> ieval (St H R (JMP l)) (St H R I')
+| R_IJmpR_Succ : forall H R I' r,
+    H (Id (R (Id r))) = Some I' -> ieval (St H R (JMP R(r))) (St H R I')
+| R_IJmp_Fail : forall H R I a,
+    H (Id (aeval a R)) = None -> ieval (St H R I) (St H R I)
+| R_IIf_EQ : forall H R I I2 r v,
+    aeval (AReg r) R = 0 -> (H (Id v)) = Some I2 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I2)
+| R_IIf_NEQ : forall H R I r v,
+    aeval (AReg r) R <> 0 -> ieval (St H R (JIF R(r) v ;; I)) (St H R I)   
+| R_ISeq : forall st st' st'',
+    ieval st st' -> ieval st' st'' -> ieval st st''.
 
 (** Example of a program fragment that multiplies 2 numbers stored in registers 1 and 2 and stores their product in register 3, before finally looping in its final state register 4. *)
 Definition init_heap := update (update (update empty_heap (Id 1) (R(3) := 0 ;; JMP 2)) (Id 2) (JIF R(1) 3 ;; R(2) +:= R(3) ;; R(1) -:= 1 ;; JMP 2) ) (Id 3) (JMP R(4)).
@@ -109,9 +109,9 @@ Eval compute in init_heap (Id (init_regs (Id 6))).
 
 (* jump to a label proof *)
 Example ieval_example1 : ieval (St init_heap init_regs
-                          (R(3) := 0 ;; JMP 2))
+                                   (R(3) := 0 ;; JMP 2))
                                (St init_heap (t_update init_regs (Id 3) 0)
-                          (JIF R(1) 3 ;; R(2) +:= R(3) ;; R(1) -:= 1 ;; JMP 2)).
+                                   (JIF R(1) 3 ;; R(2) +:= R(3) ;; R(1) -:= 1 ;; JMP 2)).
 Proof.
   apply R_ISeq with (St init_heap (t_update init_regs (Id 3) 0) (IJmp (ALab 2))).
   apply R_IMov.
@@ -140,11 +140,11 @@ Morrisett's paper uses the polymorphic type for due to some more benefits it aff
  *)
 
 Inductive ty : Type :=
- | int : ty
- | reg : ty -> ty
- | code : partial_map ty -> ty
- | arrow : partial_map ty -> partial_map ty -> ty
- | True : ty.
+| int : ty
+| reg : ty -> ty
+| code : partial_map ty -> ty
+| arrow : partial_map ty -> partial_map ty -> ty
+| True : ty.
 
 
 Definition context := partial_map ty.
@@ -158,47 +158,47 @@ Definition empty_Psi : context := empty.
 (** The Typing Rules *)
 (** Ψ is a partial map containing types of instruction sequences. As all instruction sequences end in a JMP statement, all valid values in Ψ are Some (code Γ) where Γ is the initial type state of register expected by that instruction sequence. Now, typing rules may require presence of either both Ψ and Γ, or only Ψ or neither. Hence, we introduce a combined context structure, that handles all the 3 cases. *)
 Inductive cmbnd_ctx :=
- | EmptyCtx : cmbnd_ctx
- | PsiCtx : context -> cmbnd_ctx
- | PsiGammaCtx : context -> context -> cmbnd_ctx.
+| EmptyCtx : cmbnd_ctx
+| PsiCtx : context -> cmbnd_ctx
+| PsiGammaCtx : context -> context -> cmbnd_ctx.
 
 (** Typing rules for arithmetic expressions *)
 Inductive ahas_type : cmbnd_ctx -> val -> ty -> Prop :=
- | S_Int : forall Ψ n,
-     ahas_type (PsiCtx Ψ) (ANum n) int
- | S_Lab : forall Ψ Γ l v R,
-     Ψ (Id l) = Some (code Γ) -> l = aeval (ALab v) R -> ahas_type (PsiCtx Ψ) (ALab v) (code Γ)
- | S_Reg : forall Ψ Γ r,
-     Γ (Id r) = Some (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int)
- | S_RegV : forall Ψ Γ r,
-     ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg (code Γ))
- | S_RegT : forall Ψ Γ r,
-     ahas_type (PsiGammaCtx Ψ Γ) (AReg r) True
- | S_Val : forall Ψ Γ a tau,
-     ahas_type (PsiCtx Ψ) a tau -> ahas_type (PsiGammaCtx Ψ Γ) a tau.
+| S_Int : forall Ψ n,
+    ahas_type (PsiCtx Ψ) (ANum n) int
+| S_Lab : forall Ψ Γ l v R,
+    Ψ (Id l) = Some (code Γ) -> l = aeval (ALab v) R -> ahas_type (PsiCtx Ψ) (ALab v) (code Γ)
+| S_Reg : forall Ψ Γ r,
+    Γ (Id r) = Some (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int)
+| S_RegV : forall Ψ Γ r,
+    ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg (code Γ))
+| S_RegT : forall Ψ Γ r,
+    ahas_type (PsiGammaCtx Ψ Γ) (AReg r) True
+| S_Val : forall Ψ Γ a tau,
+    ahas_type (PsiCtx Ψ) a tau -> ahas_type (PsiGammaCtx Ψ Γ) a tau.
 
 Hint Constructors ahas_type.
 
 (** Typing rules for instructions *)
 Inductive ihas_type : cmbnd_ctx -> instr -> ty -> Prop :=
- | S_Mov : forall Ψ Γ R d a tau,
+| S_Mov : forall Ψ Γ R d a tau,
     ahas_type (PsiGammaCtx Ψ Γ) a tau -> ahas_type (PsiGammaCtx Ψ Γ) (AReg d) (reg tau) -> (update Γ (Id d) (reg tau)) = Γ -> ihas_type (PsiCtx Ψ) (R(d) := aeval a R) (arrow Γ Γ)
- | S_Add : forall Ψ Γ d s,
+| S_Add : forall Ψ Γ d s,
     ahas_type (PsiGammaCtx Ψ Γ) (AReg s) (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (AReg d) (reg int) -> update Γ (Id d) (reg int) = Γ -> ihas_type (PsiCtx Ψ) (R(d) +:= R(s)) (arrow Γ Γ)
- | S_Sub : forall Ψ Γ s a v,
-      ahas_type (PsiGammaCtx Ψ Γ) a int -> ahas_type (PsiGammaCtx Ψ Γ) (AReg s) (reg int) -> a = ANum v -> ihas_type (PsiCtx Ψ) (R(s) -:= v) (arrow Γ Γ)
- | S_If :  forall Ψ Γ r v,
-     ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> ihas_type (PsiCtx Ψ) (JIF R(r) v) (arrow Γ Γ).
+| S_Sub : forall Ψ Γ s a v,
+    ahas_type (PsiGammaCtx Ψ Γ) a int -> ahas_type (PsiGammaCtx Ψ Γ) (AReg s) (reg int) -> a = ANum v -> ihas_type (PsiCtx Ψ) (R(s) -:= v) (arrow Γ Γ)
+| S_If :  forall Ψ Γ r v,
+    ahas_type (PsiGammaCtx Ψ Γ) (AReg r) (reg int) -> ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> ihas_type (PsiCtx Ψ) (JIF R(r) v) (arrow Γ Γ).
 Hint Constructors ihas_type.
 
 
 Inductive iseq_has_type : cmbnd_ctx -> instr_seq -> ty -> Prop :=
- | S_Jmp :  forall Ψ Γ v,
-     ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> iseq_has_type (PsiCtx Ψ) (JMP v) (code Γ)
- | S_JmpT :  forall Ψ Γ v,
-     ahas_type (PsiGammaCtx Ψ Γ) (AReg v) True -> iseq_has_type (PsiCtx Ψ) (JMP R(v)) (code Γ)
- | S_Seq :  forall Ψ i1 i2 Γ Γ2,
-     ihas_type (PsiCtx Ψ) i1 (arrow Γ Γ2) -> iseq_has_type (PsiCtx Ψ) i2 (code Γ2) -> iseq_has_type (PsiCtx Ψ) (ISeq i1 i2) (code Γ).                                           Hint Constructors iseq_has_type.
+| S_Jmp :  forall Ψ Γ v,
+    ahas_type (PsiGammaCtx Ψ Γ) (ALab v) (code Γ) -> iseq_has_type (PsiCtx Ψ) (JMP v) (code Γ)
+| S_JmpT :  forall Ψ Γ v,
+    ahas_type (PsiGammaCtx Ψ Γ) (AReg v) True -> iseq_has_type (PsiCtx Ψ) (JMP R(v)) (code Γ)
+| S_Seq :  forall Ψ i1 i2 Γ Γ2,
+    ihas_type (PsiCtx Ψ) i1 (arrow Γ Γ2) -> iseq_has_type (PsiCtx Ψ) i2 (code Γ2) -> iseq_has_type (PsiCtx Ψ) (ISeq i1 i2) (code Γ).                                           Hint Constructors iseq_has_type.
 
 
 
@@ -215,9 +215,9 @@ Ltac inequality := (rewrite <- beq_id_false_iff; trivial).
 Ltac crush_map := match_map ; inequality; try reflexivity.
 
 Ltac rewrite_hyp :=
-     match goal with
-       | [ H : ?n = _ |- context[?n] ] => rewrite H
-     end.
+  match goal with
+  | [ H : ?n = _ |- context[?n] ] => rewrite H
+  end.
 
 Ltac crush_generic :=
   repeat match goal with
@@ -241,7 +241,7 @@ Ltac crush :=
                          | [ |- ?T -> False  ]  => assert T
                          | _ => try subst; trivial
                          end).
-    
+
 
 
 Example heap_2_type : forall I (R : registers), (init_heap (Id 2)) = Some I -> iseq_has_type (PsiCtx init_Psi) I (code init_Gamma).
@@ -279,7 +279,7 @@ Proof.
   rewrite <- beq_id_false_iff.
   trivial.
 Qed.
-                   
+
 (** Typing rule for register file *)
 Inductive Rhas_type : cmbnd_ctx -> registers -> context -> Prop :=
 | S_Regfile : forall Ψ Γ R r tau a,
@@ -350,7 +350,7 @@ Proof.
   destruct H3 as [i G].
   exists i.
   crush.
- Qed.
+Qed.
 
 (** Finally the proof of Soundness *)
 Theorem Soundness : forall H R Is,
@@ -359,11 +359,11 @@ Proof.
   intros.
   inversion H0 ; induction Is; inverts H4.
   induction i; inversion H12;
-   try match goal with
-    | [H : Γ = Γ2 |- _ ] => symmetry in H
-    end;
+    try match goal with
+        | [H : Γ = Γ2 |- _ ] => symmetry in H
+        end;
     try subst.
-  
+
 
   (* ISeq IMov I *)
   exists H (t_update R (Id d) (aeval a R1)) Is.

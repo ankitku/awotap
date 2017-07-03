@@ -1,0 +1,2 @@
+
+CoFixpoint f := f.
